@@ -1,0 +1,17 @@
+{
+  "generator": "Built-in GPT Image tool",
+  "prompts": [
+    [
+      "island-rock",
+      "Use case: stylized-concept\nAsset type: seamless tiling albedo texture for the exposed rock underside of a floating Shenzhen Bay island in a WebGL and Blender project.\nPrimary request: a high quality orthographic close up of weathered layered dark slate and warm sandstone rock, fine fractures, subtle mineral grains, restrained moss in cracks, dense natural surface detail. Fill the entire square edge to edge with rock. Physically plausible game material, neutral diffuse color, evenly lit, no cast shadows, no perspective, no objects, no text, no frame, no watermark. Seamlessly tileable on all four edges. Color palette: charcoal slate, desaturated taupe and muted ochre. Keep large-scale variation quiet so repeats are unobtrusive."
+    ],
+    [
+      "cloud-puff",
+      "Use case: stylized-concept\nAsset type: one transparent billboard sprite for soft cloud particles around a floating 3D city.\nPrimary request: a single soft rounded cumulus cloud puff, pale white with subtly cool bluish lower folds, volumetric photographic softness, gently sculpted billows, feathered translucent edges with generous transparent margin on all sides. Front view isolated at center. Neutral lighting so it works at different times of day in a shader. No sky, no landscape, no ground, no text, no watermark, no strong shadows. The background must be truly transparent."
+    ],
+    [
+      "tower-facade",
+      "Use case: stylized-concept\nAsset type: seamless tiling building facade albedo texture for Shenzhen high-rise material in Blender.\nPrimary request: perfectly front-facing architectural material sample of a refined contemporary Shenzhen office tower curtain wall. Regular square grid with thin brushed aluminum mullions, muted blue gray reflective glass, subtle varied blind positions and a few warm interior panes. Straight orthogonal lines, no perspective or building silhouette. Fill the complete square. Neutral soft diffuse daylight. Seamless repeat on all four edges. No sky, no ground, no signage, no lettering, no logos, no watermark."
+    ]
+  ]
+}

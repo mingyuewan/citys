@@ -210,6 +210,7 @@ body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
 </div>
 
 <script type="application/json" id="szdata">/*__SZDATA__*/</script>
+<script type="application/json" id="sztex">/*__SZTEX__*/</script>
 <script>
 "use strict";
 /* =========================================================================
@@ -1033,6 +1034,11 @@ function buildGroundTexture(osm, R, S, maskImg) {
 const canvas = $("#gl");
 const gl = canvas.getContext("webgl2", { antialias: false, powerPreference: "high-performance", alpha: false });
 if (!gl) { loader.show("浏览器不支持 WebGL2", "请使用最新版 Chrome、Edge、Firefox 或 Safari 打开。", { err: " " }); throw new Error("no webgl2"); }
+// GPU context loss (common on mobile when backgrounded): stop drawing, then rebuild by reloading
+// (all data is embedded, so a reload works offline)
+const CTX = { lost: false };
+canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); CTX.lost = true; loader.show("显卡上下文已丢失", "正在等待浏览器恢复 WebGL…"); });
+canvas.addEventListener("webglcontextrestored", () => { loader.show("正在恢复", "重新载入场景"); location.reload(); });
 const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
 const floatRT = !!gl.getExtension("EXT_color_buffer_float");
 gl.getExtension("OES_texture_float_linear");
@@ -1093,9 +1099,10 @@ float shadowAt(vec4 lp){
   if (uShadowOn < 0.5) return 1.0;
   vec3 c = lp.xyz / lp.w * 0.5 + 0.5;
   if (c.x < 0.001 || c.x > 0.999 || c.y < 0.001 || c.y > 0.999 || c.z > 0.999) return 1.0;
-  float s = 0.0;
-  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) s += texture(uShadow, vec3(c.xy + vec2(i, j) * uShadowTexel, c.z - 0.00025));
-  return s / 9.0;
+  // 4 taps on top of the hardware 2×2 compare filter (LINEAR) ≈ the old 3×3 footprint at less than half the fetches
+  float z = c.z - 0.00025; vec2 o = uShadowTexel * 0.6;
+  return 0.25 * (texture(uShadow, vec3(c.xy + vec2(-o.x, -o.y), z)) + texture(uShadow, vec3(c.xy + vec2(o.x, -o.y), z))
+               + texture(uShadow, vec3(c.xy + vec2(-o.x, o.y), z)) + texture(uShadow, vec3(c.xy + vec2(o.x, o.y), z)));
 }
 vec3 hsv(float h, float s, float v){ vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
 `;
@@ -1117,6 +1124,7 @@ void main(){
 const meshFS = HEAD + COMMON + `
 in vec3 vPos; in vec3 vNrm; in vec3 vCol; in vec2 vUv; in vec4 vLight; flat in float vBid; flat in float vMat;
 uniform float uSel; uniform vec3 uAccent; uniform float uLit;
+uniform sampler2D uRock; uniform sampler2D uFacade; uniform vec2 uTexOn;   // GPT Image textures (x: rock, y: facade loaded)
 out vec4 o;
 float lineAA(float f, float w, float fw){ return smoothstep(w - fw, w + fw, f) - smoothstep(1.0 - w - fw, 1.0 - w + fw, f); }
 // fake rooms behind the glass ("interior mapping"): returns the surface colour hit inside the room
@@ -1169,6 +1177,7 @@ void main(){
   float ao = (roof || m >= 10) ? 1.0 : mix(0.55, 1.0, smoothstep(0.0, 14.0, vPos.y));
   vec3 alb = vCol, emis = vec3(0.0);
   float glassAmt = 0.0;
+  vec3 facadeK = vec3(1.0);
   float hb = fract(sin(vBid * 0.731 + 0.1) * 43758.5453);
   float lit = uLit * (0.55 + 0.6 * hb);
   float night = uNight;
@@ -1181,6 +1190,11 @@ void main(){
       float span = mix(0.82, smoothstep(0.17 - fw.y, 0.17 + fw.y, f.y), fade);
       glassAmt = mull * span;
       alb = mix(vCol * 1.35 + 0.08, vCol, glassAmt);
+      if (uTexOn.y > 0.5) {   // curtain-wall texture: one tile = 10×10 bays of the procedural grid; strongest where the grid fades out
+        vec3 ft = texture(uFacade, vUv / (m == 7 ? vec2(18.0, 26.0) : vec2(15.0, 40.0))).rgb;
+        vec3 fm = textureLod(uFacade, vec2(0.5), 12.0).rgb;
+        facadeK = mix(vec3(1.0), ft / max(fm, vec3(0.05)), (m == 7 ? 0.3 : 0.55) * (1.0 - 0.5 * fade));
+      }
       vec2 bay = floor(vec2(vUv.x / 6.0, vUv.y / 4.0));
       float epo = floor(uTime / 55.0 + h31(vec3(bay.yx, vBid + 2.0)) * 9.0);
       float on = step(h31(vec3(bay + epo * 0.573, vBid)), lit * 0.5);
@@ -1212,6 +1226,7 @@ void main(){
         vec3 led = hsv(hue, 0.7, 1.0) * pow(wave, 3.0) * 1.7 + vec3(0.9, 0.95, 1.0) * fin * 0.3;
         emis += led * night * smoothstep(0.0, 6.0, vPos.y);
       }
+      alb *= facadeK;
     } else if (m == 1) {
       vec2 cell = vec2(vUv.x / 3.6, vUv.y / 3.0); vec2 f = fract(cell); vec2 fw = fwidth(cell); vec2 id = floor(cell);
       float fade = 1.0 - smoothstep(0.5, 1.4, max(fw.x, fw.y));
@@ -1299,6 +1314,12 @@ void main(){
     float nA = vnoise(vec2(vUv.x * 0.02, vPos.y * 0.02)), nB = vnoise(vec2(vUv.x * 0.11, vPos.y * 0.13));
     float band = 0.5 + 0.5 * sin(vPos.y * 0.09 + nA * 7.0);
     alb = vCol * (0.78 + 0.22 * band) * (0.8 + 0.4 * nB);
+    if (uTexOn.x > 0.5) {   // rock strata texture at two scales, normalised by its mean so the page's tones are kept
+      vec2 ru = vec2(vUv.x, vPos.y);
+      vec3 rm = max(textureLod(uRock, vec2(0.5), 12.0).rgb, vec3(0.05));
+      vec3 r1 = texture(uRock, ru / vec2(260.0, 180.0)).rgb / rm, r2 = texture(uRock, ru / vec2(41.0, 29.0)).rgb / rm;
+      alb = vCol * (0.86 + 0.14 * band) * r1 * mix(vec3(1.0), r2, 0.5 * (1.0 - smoothstep(600.0, 2600.0, camD)));
+    }
     alb = mix(alb, vec3(0.46, 0.34, 0.24), smoothstep(-90.0, -10.0, vPos.y) * 0.6);
     float moss = smoothstep(0.35, 0.8, n.y) * smoothstep(0.4, 0.7, nA);
     alb = mix(alb, vec3(0.24, 0.36, 0.17), moss);
@@ -1384,7 +1405,7 @@ void main(){
     vec3 refl = skyColor(R);
     float F = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
     float spec = pow(max(dot(R, uLightDir), 0.0), 220.0) * sh;
-    vec3 base0 = mix(vCol * 0.20 * (amb + direct), inDay * (amb * 0.55 + direct * 0.08 + 0.02), clamp(inF / max(glassAmt, 0.01), 0.0, 1.0));
+    vec3 base0 = mix(vCol * facadeK * 0.20 * (amb + direct), inDay * (amb * 0.55 + direct * 0.08 + 0.02), clamp(inF / max(glassAmt, 0.01), 0.0, 1.0));
     vec3 gc = base0 + refl * (0.10 + 0.62 * F) * mix(1.0, 0.3, uNight) + uLightCol * spec * 2.0 * (1.0 - uNight * 0.8);
     c = mix(c, gc * ao, glassAmt);
   }
@@ -1589,23 +1610,25 @@ void main(){ vec2 c = gl_PointCoord - 0.5; float r = length(c);
 /* clouds */
 const cloudVS = HEAD + `
 layout(location=0) in vec2 aCorner; layout(location=1) in vec4 aC; layout(location=2) in vec2 aL;
-uniform mat4 uVP; uniform vec3 uCamR; uniform vec3 uCamU; uniform vec3 uCam;
+uniform mat4 uVP; uniform vec3 uCamR; uniform vec3 uCamU; uniform vec3 uCam; uniform float uAspect;
 out vec2 vUv; out float vLit; out float vA; out vec3 vPos;
 void main(){
-  vec3 p = aC.xyz + (uCamR * aCorner.x + uCamU * aCorner.y) * aC.w;
+  vec3 p = aC.xyz + (uCamR * aCorner.x * uAspect + uCamU * aCorner.y) * aC.w;
   vUv = aCorner * 0.5 + 0.5; vLit = aL.x; vA = aL.y; vPos = p;
   gl_Position = uVP * vec4(p, 1.0);
 }`;
 const cloudFS = HEAD + COMMON + `
-in vec2 vUv; in float vLit; in float vA; in vec3 vPos; uniform sampler2D uPuff; out vec4 o;
+in vec2 vUv; in float vLit; in float vA; in vec3 vPos; uniform sampler2D uPuff; uniform float uPuffA; out vec4 o;
 void main(){
-  float t = texture(uPuff, vUv).r;
+  vec4 tx = texture(uPuff, vUv);
+  float t = mix(tx.r, tx.a, uPuffA);                                                  // GPT Image cloud: alpha = coverage
+  float shade = mix(1.0, 0.5 + 0.55 * dot(tx.rgb, vec3(0.3, 0.5, 0.2)), uPuffA);     // and its own self-shading
   float d = distance(vPos, uCam);
-  float a = t * vA * smoothstep(120.0, 750.0, d);
+  float a = t * vA * smoothstep(120.0, 750.0, d) * mix(1.0, 1.0 - 0.55 * uNight, uPuffA);   // textured puffs are denser: thin them at night so city light shows through
   vec3 sunC = mix(vec3(1.0, 0.99, 0.97), vec3(1.0, 0.72, 0.50), uGold);
   vec3 dayC = mix(vec3(0.60, 0.64, 0.70), sunC, vLit) * (0.85 + 0.25 * vUv.y);
   vec3 nightC = mix(vec3(0.16, 0.10, 0.07), vec3(0.06, 0.07, 0.10), vLit);
-  vec3 c = mix(dayC, nightC, uNight);
+  vec3 c = mix(dayC, nightC, uNight) * shade;
   c = fogIt(c, vPos);
   o = vec4(c * a, a);
 }`;
@@ -1828,6 +1851,29 @@ const P = {
   bright: compile(fsTriVS, brightFS), down: compile(fsTriVS, downFS), up: compile(fsTriVS, upFS), comp: compile(fsTriVS, compFS)
 };
 const emptyVAO = gl.createVertexArray();
+
+/* ---------------- GPT Image textures (embedded as data URIs by tools/assemble3.py) ---------------- */
+const TEX = { rock: null, facade: null, cloud: null, white: null };
+TEX.white = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, TEX.white);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+function texFromImage(im, repeat) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);   // v = up, like the facade / billboard UVs
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, im);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const wrap = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+  if (aniso && repeat) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  return t;
+}
+const texReady = (() => {
+  let src = {}; try { src = JSON.parse(document.getElementById("sztex").textContent); } catch (e) { /* not assembled: procedural fallbacks */ }
+  return Promise.all(Object.entries(src).map(([k, url]) => new Promise(res => {
+    const im = new Image(); im.onload = () => { TEX[k] = texFromImage(im, k !== "cloud"); res(); }; im.onerror = () => res(); im.src = url;
+  })));
+})();
 
 function meshVAO(V, I, dynamic) {
   const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
@@ -2377,7 +2423,7 @@ function initClouds() {
   gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 0); gl.vertexAttribDivisor(1, 1);
   gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 24, 16); gl.vertexAttribDivisor(2, 1);
   gl.bindVertexArray(null);
-  return { puffs, vao, ib, buf: new Float32Array(puffs.length * 6), tex: puffTexture() };
+  return { puffs, vao, ib, buf: new Float32Array(puffs.length * 6), tex: TEX.cloud || puffTexture(), texA: TEX.cloud ? 1 : 0 };
 }
 
 /* ---------------- scene state ---------------- */
@@ -2417,8 +2463,16 @@ function sky(tod) {
 }
 function fmtTod(t) { t = ((t % 24) + 24) % 24; const h = Math.floor(t), m = Math.floor((t - h) * 60); return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; }
 
-/* ---------------- render targets ---------------- */
-const RT = { w: 0, h: 0, msFB: null, msColor: null, msDepth: null, resFB: null, sceneTex: null, bloom: [], samples: 4 };
+/* ---------------- render targets ----------------
+   Main pass: MSAA renderbuffers resolved into a texture, then bloom + composite.
+   Sample counts are queried per format (MAX_SAMPLES is only the global maximum) and every FBO is
+   checked; on failure we fall back RGBA16F MSAA → RGBA8 MSAA → no MSAA (draw straight into the texture). */
+const RT = { w: 0, h: 0, msFB: null, msColor: null, msDepth: null, resFB: null, sceneTex: null, bloom: [], samples: 4, hdr: floatRT, mode: "" };
+const fbOK = () => gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+function fmtSamples(fmt) {
+  const s = gl.getInternalformatParameter(gl.RENDERBUFFER, fmt, gl.SAMPLES);
+  return s && s.length ? Math.min(4, Math.max(...s)) : 0;
+}
 function mkTex(w, h, hdr) {
   const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
   if (hdr) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
@@ -2426,41 +2480,71 @@ function mkTex(w, h, hdr) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
-  return { t, fb, w, h };
+  return { t, fb, w, h, ok: fbOK() };
 }
-function setupRT(w, h) {
-  if (RT.w === w && RT.h === h) return;
-  for (const k of ["msFB", "resFB"]) if (RT[k]) gl.deleteFramebuffer(RT[k]);
+function freeRT() {
+  if (RT.msFB && RT.msFB !== RT.resFB) gl.deleteFramebuffer(RT.msFB);
+  if (RT.resFB) gl.deleteFramebuffer(RT.resFB);
   for (const k of ["msColor", "msDepth"]) if (RT[k]) gl.deleteRenderbuffer(RT[k]);
   if (RT.sceneTex) gl.deleteTexture(RT.sceneTex);
   for (const b of RT.bloom) { gl.deleteTexture(b.t); gl.deleteFramebuffer(b.fb); }
-  RT.w = w; RT.h = h;
-  const fmtC = floatRT ? gl.RGBA16F : gl.RGBA8;
-  RT.samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));
-  RT.msColor = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, RT.msColor); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, RT.samples, fmtC, w, h);
-  RT.msDepth = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, RT.msDepth); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, RT.samples, gl.DEPTH_COMPONENT24, w, h);
-  RT.msFB = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, RT.msFB);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, RT.msColor);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, RT.msDepth);
-  const sc = mkTex(w, h, floatRT); RT.sceneTex = sc.t; RT.resFB = sc.fb;
-  RT.bloom = []; let bw = w >> 1, bh = h >> 1;
-  for (let i = 0; i < 5 && bw > 8 && bh > 8; i++) { RT.bloom.push(mkTex(bw, bh, floatRT)); bw >>= 1; bh >>= 1; }
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  RT.msFB = RT.resFB = RT.msColor = RT.msDepth = RT.sceneTex = null; RT.bloom = [];
 }
-// shadow map
-const SM = { size: Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE)), tex: null, fb: null, vp: new Float32Array(16), texel: 0 };
-(() => {
-  SM.size = 3072;
-  SM.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, SM.tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, SM.size, SM.size, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  SM.fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, SM.fb);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, SM.tex, 0);
-  gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+function tryRT(w, h, hdr, msaa) {
+  freeRT();
+  const fmtC = hdr ? gl.RGBA16F : gl.RGBA8;
+  const samples = msaa ? Math.min(fmtSamples(fmtC), fmtSamples(gl.DEPTH_COMPONENT24)) : 0;
+  if (msaa && samples < 2) return false;
+  const sc = mkTex(w, h, hdr); RT.sceneTex = sc.t; RT.resFB = sc.fb;
+  if (!sc.ok) return false;
+  RT.msDepth = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, RT.msDepth);
+  if (samples) {
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, w, h);
+    RT.msColor = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, RT.msColor); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, fmtC, w, h);
+    RT.msFB = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, RT.msFB);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, RT.msColor);
+  } else {   // no MSAA: render straight into the scene texture
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+    RT.msFB = RT.resFB; gl.bindFramebuffer(gl.FRAMEBUFFER, RT.msFB);
+  }
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, RT.msDepth);
+  if (!fbOK()) return false;
+  let bw = w >> 1, bh = h >> 1;
+  for (let i = 0; i < 5 && bw > 8 && bh > 8; i++) { const b = mkTex(bw, bh, hdr); RT.bloom.push(b); if (!b.ok) return false; bw >>= 1; bh >>= 1; }
+  RT.samples = samples; RT.hdr = hdr; RT.mode = (hdr ? "RGBA16F" : "RGBA8") + (samples ? ` MSAA×${samples}` : " 无 MSAA");
+  return true;
+}
+function setupRT(w, h) {
+  if (RT.w === w && RT.h === h) return;
+  RT.w = w; RT.h = h;
+  const order = floatRT ? [[true, true], [false, true], [true, false], [false, false]] : [[false, true], [false, false]];
+  let ok = false;
+  for (const [hdr, ms] of order) if ((ok = tryRT(w, h, hdr, ms))) break;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-})();
+  if (!ok) console.error("render targets incomplete", w, h);
+}
+// shadow map: sized to the device (WebGL2 only guarantees 2048), FBO checked, falls back to smaller sizes
+const SM = { size: 0, tex: null, fb: null, vp: new Float32Array(16), texel: 0, on: true };
+const SM_MAX = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+const LOW_END = matchMedia("(pointer: coarse)").matches || Math.min(screen.width, screen.height) < 700;
+function setupShadow(want) {
+  for (let size = Math.min(want, SM_MAX); size >= 1024; size >>= 1) {
+    if (SM.tex) gl.deleteTexture(SM.tex); if (SM.fb) gl.deleteFramebuffer(SM.fb);
+    SM.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, SM.tex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, size, size);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    SM.fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, SM.fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, SM.tex, 0);
+    gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+    const ok = fbOK() && !gl.getError();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (ok) { SM.size = size; SM.on = true; return; }
+  }
+  SM.on = false; SM.size = 1; console.warn("shadow map unavailable; shadows off");
+}
+setupShadow(LOW_END ? 2048 : 3072);
 
 /* ---------------- build scene ---------------- */
 function applyModeUI(night) {
@@ -2470,6 +2554,7 @@ function applyModeUI(night) {
   $("#bMode").firstChild.textContent = isNight ? "日景 " : "夜景 ";
 }
 async function buildScene(maskImg, luImg) {
+  await texReady;
   loader.show("正在搭建深圳湾", `${fmt(D.roads.length)} 条道路 · ${fmt(D.buildings.length + D.landmarks.length)} 栋楼 · ${fmt((D.trees.length + D.palms.length) / 2)} 棵树`);
   await sleep(30);
   const osm = decodeData(); S.osm = osm;
@@ -2759,33 +2844,35 @@ $("#selLm").onchange = e => {
 };
 function closeCard() { $("#card").hidden = true; S.sel = -1; }
 
-/* ---------------- picking ---------------- */
-let pickFB = null, pickTex = null, pickDepth = null, pickW = 0, pickH = 0;
+/* ---------------- picking ----------------
+   A permanent 1×1 target: the projection is narrowed so the clicked pixel fills it, so nothing is
+   reallocated when the canvas (or the dynamic resolution) changes and the read-back is a single pixel. */
+let pickFB = null;
 function pick(cx, cy) {
-  if (!S.ready) return;
+  if (!S.ready || CTX.lost) return;
   const W = canvas.width, H = canvas.height;
-  if (W !== pickW || H !== pickH || !pickFB) {
-    if (pickFB) { gl.deleteFramebuffer(pickFB); gl.deleteTexture(pickTex); gl.deleteRenderbuffer(pickDepth); }
-    pickFB = gl.createFramebuffer(); pickTex = gl.createTexture(); pickDepth = gl.createRenderbuffer();
-    gl.bindTexture(gl.TEXTURE_2D, pickTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, pickDepth); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+  if (!pickFB) {
+    pickFB = gl.createFramebuffer(); const tex = gl.createTexture(), dep = gl.createRenderbuffer();
+    gl.bindTexture(gl.TEXTURE_2D, tex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, dep); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, 1, 1);
     gl.bindFramebuffer(gl.FRAMEBUFFER, pickFB);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pickTex, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, pickDepth);
-    pickW = W; pickH = H;
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, dep);
   }
+  const r = canvas.getBoundingClientRect(), dpr = W / r.width;
+  const px = Math.floor((cx - r.left) * dpr), py = Math.floor(H - (cy - r.top) * dpr);
+  // clip' = scale/translate so that pixel (px, py) covers the whole 1×1 viewport
+  const pm = new Float32Array([W, 0, 0, 0, 0, H, 0, 0, 0, 0, 1, 0, W - 2 * px - 1, H - 2 * py - 1, 0, 1]);
   gl.bindFramebuffer(gl.FRAMEBUFFER, pickFB);
-  gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.viewport(0, 0, 1, 1); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
   gl.useProgram(P.pick.p);
-  gl.uniformMatrix4fv(P.pick.u.uVP, false, frame.vp); gl.uniform1f(P.pick.u.uRise, S.rise); gl.uniform1f(P.pick.u.uMaxR, S.R * 1.42);
+  gl.uniformMatrix4fv(P.pick.u.uVP, false, M.mul(pm, frame.vp)); gl.uniform1f(P.pick.u.uRise, S.rise); gl.uniform1f(P.pick.u.uMaxR, S.R * 1.42);
   gl.bindVertexArray(S.city.vao); gl.drawElements(gl.TRIANGLES, S.showGen ? S.city.count : S.lmIdx, gl.UNSIGNED_INT, 0);
-  const r = canvas.getBoundingClientRect(), dpr = W / r.width;
-  const px = new Uint8Array(4);
-  gl.readPixels(Math.floor((cx - r.left) * dpr), Math.floor(H - (cy - r.top) * dpr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  const pxl = new Uint8Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pxl);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  const id = px[0] + px[1] * 256 + px[2] * 65536 - 1;
+  const id = pxl[0] + pxl[1] * 256 + pxl[2] * 65536 - 1;
   if (id >= 0 && id < S.osm.buildings.length) showCard(id); else closeCard();
 }
 function showCard(i) {
@@ -2998,13 +3085,35 @@ function beam(p0, dir, len, eye) {
 /* ---------------- render loop ---------------- */
 const frame = { vp: new Float32Array(16), camR: [1, 0, 0] };
 let last = performance.now();
-const PERF = { scale: (window.SZ_TEST && window.SZ_TEST.scale) || 1, ema: 0.016, lastAdj: 0 };
+// dynamic resolution: a few fixed levels with hysteresis and a minimum dwell time, so render targets
+// are only reallocated when the load really changes (not every 2 s with drifting sizes)
+const PERF_LEVELS = [1, 0.85, 0.72, 0.6];
+const PERF = { level: 0, scale: (window.SZ_TEST && window.SZ_TEST.scale) || 1, ema: 0.016, lastAdj: 0, slow: 0, fast: 0 };
+// CSS size of the canvas, updated by ResizeObserver (reading clientWidth every frame forces a style recalc
+// right after the label transforms were written)
+const VIEW = { cw: Math.max(1, canvas.clientWidth), ch: Math.max(1, canvas.clientHeight) };
+if (window.ResizeObserver) new ResizeObserver(es => { const r = es[es.length - 1].contentRect; VIEW.cw = Math.max(1, r.width); VIEW.ch = Math.max(1, r.height); }).observe(canvas);
+else addEventListener("resize", () => { VIEW.cw = Math.max(1, canvas.clientWidth); VIEW.ch = Math.max(1, canvas.clientHeight); });
 function resize() {
-  const cw0 = Math.max(1, canvas.clientWidth), ch0 = Math.max(1, canvas.clientHeight);
+  const cw0 = VIEW.cw, ch0 = VIEW.ch;
   const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(3.2e6 / (cw0 * ch0))) * PERF.scale;
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  const w = Math.max(1, Math.round(cw0 * dpr)), h = Math.max(1, Math.round(ch0 * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   setupRT(w, h);
+}
+function adaptPerf(now, dt) {
+  PERF.ema = lerp(PERF.ema, dt, 0.05);
+  if (window.SZ_TEST || !S.ready || document.hidden) return;
+  // count consecutive slow / fast seconds-ish of frames, change one level at a time
+  if (PERF.ema > 0.036) { PERF.slow += dt; PERF.fast = 0; } else if (PERF.ema < 0.019) { PERF.fast += dt; PERF.slow = 0; } else { PERF.slow = PERF.fast = 0; }
+  const since = now - PERF.lastAdj;
+  let lv = PERF.level;
+  if (PERF.slow > 2 && since > 4000 && lv < PERF_LEVELS.length - 1) lv++;
+  else if (PERF.fast > 6 && since > 10000 && lv > 0) lv--;
+  if (lv === PERF.level) return;
+  PERF.level = lv; PERF.scale = PERF_LEVELS[lv]; PERF.lastAdj = now; PERF.slow = PERF.fast = 0;
+  // at the lowest level also drop the shadow map to 2048 (one-off reallocation)
+  if (lv === PERF_LEVELS.length - 1 && SM.on && SM.size > 2048) setupShadow(2048);
 }
 function setCommon(pr, L, eye, now) {
   const u = pr.u;
@@ -3019,12 +3128,16 @@ function setCommon(pr, L, eye, now) {
   if (u.uTime) gl.uniform1f(u.uTime, now / 1000);
   if (u.uWind) gl.uniform2fv(u.uWind, S.wind);
   if (u.uShadow) { gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, SM.tex); gl.uniform1i(u.uShadow, 3); }
-  if (u.uShadowOn) gl.uniform1f(u.uShadowOn, L.dayF > 0.15 ? 1 : 0);
+  if (u.uShadowOn) gl.uniform1f(u.uShadowOn, L.dayF > 0.15 && SM.on ? 1 : 0);
   if (u.uShadowTexel) gl.uniform2f(u.uShadowTexel, 1 / SM.size, 1 / SM.size);
   if (u.uLightVP) gl.uniformMatrix4fv(u.uLightVP, false, SM.vp);
   if (u.uNOff) gl.uniform1f(u.uNOff, SM.texel * 1.5);
   if (u.uRise) gl.uniform1f(u.uRise, S.rise);
   if (u.uMaxR) gl.uniform1f(u.uMaxR, S.R * 1.42);
+  if (u.uRock) { gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, TEX.rock || TEX.white); gl.uniform1i(u.uRock, 4); }
+  if (u.uFacade) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, TEX.facade || TEX.white); gl.uniform1i(u.uFacade, 5); }
+  if (u.uTexOn) gl.uniform2f(u.uTexOn, TEX.rock ? 1 : 0, TEX.facade ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0);
 }
 function drawFS() { gl.bindVertexArray(emptyVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); }
 
@@ -3032,12 +3145,8 @@ function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   const t = now / 1000;
-  PERF.ema = lerp(PERF.ema, dt, 0.05);
-  if (!window.SZ_TEST && S.ready && now - PERF.lastAdj > 2000) {
-    PERF.lastAdj = now;
-    if (PERF.ema > 0.036 && PERF.scale > 0.5) PERF.scale *= 0.85;
-    else if (PERF.ema < 0.019 && PERF.scale < 1) PERF.scale = Math.min(1, PERF.scale * 1.08);
-  }
+  if (CTX.lost) return;
+  adaptPerf(now, dt);
   resize();
   // clock
   if (Math.abs(S.todTarget - S.tod) > 0.001) { S.tod += (S.todTarget - S.tod) * Math.min(1, dt * 2.2); if (Math.abs(S.todTarget - S.tod) < 0.01) S.tod = S.todTarget; }
@@ -3111,7 +3220,7 @@ function tick(now) {
   const ld = L.lightDir;
   const lview = M.lookAt([fx + ld[0] * 5000, ld[1] * 5000, fz + ld[2] * 5000], [fx, 0, fz], Math.abs(ld[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0]);
   SM.vp = M.mul(M.ortho(-hs, hs, -hs, hs, 100, 10000), lview);
-  if (L.dayF > 0.15) {
+  if (L.dayF > 0.15 && SM.on) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, SM.fb); gl.viewport(0, 0, SM.size, SM.size);
     gl.clear(gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.BLEND);
     gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2.0);
@@ -3235,6 +3344,7 @@ function tick(now) {
     gl.useProgram(P.cloud.p); setCommon(P.cloud, L, eye, now);
     gl.uniformMatrix4fv(P.cloud.u.uVP, false, vp); gl.uniform3fv(P.cloud.u.uCamR, frame.camR); gl.uniform3fv(P.cloud.u.uCamU, frame.camU);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, C.tex); gl.uniform1i(P.cloud.u.uPuff, 1);
+    gl.uniform1f(P.cloud.u.uPuffA, C.texA); gl.uniform1f(P.cloud.u.uAspect, C.texA ? 1.5 : 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, C.ib); gl.bufferSubData(gl.ARRAY_BUFFER, 0, buf);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(C.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, C.puffs.length);
@@ -3243,14 +3353,16 @@ function tick(now) {
   gl.bindVertexArray(null);
 
   // ---- resolve + bloom + composite
-  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, RT.msFB); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, RT.resFB);
-  gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  if (RT.msFB !== RT.resFB) {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, RT.msFB); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, RT.resFB);
+    gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  }
   gl.disable(gl.DEPTH_TEST);
   const B = RT.bloom;
   if (B.length) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, B[0].fb); gl.viewport(0, 0, B[0].w, B[0].h);
     gl.useProgram(P.bright.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, RT.sceneTex); gl.uniform1i(P.bright.u.uTex, 0);
-    gl.uniform1f(P.bright.u.uThr, floatRT ? lerp(1.15, 0.85, L.night) : 0.8); drawFS();
+    gl.uniform1f(P.bright.u.uThr, RT.hdr ? lerp(1.15, 0.85, L.night) : 0.8); drawFS();
     gl.useProgram(P.down.p); gl.uniform1i(P.down.u.uTex, 0);
     for (let i = 1; i < B.length; i++) { gl.bindFramebuffer(gl.FRAMEBUFFER, B[i].fb); gl.viewport(0, 0, B[i].w, B[i].h); gl.bindTexture(gl.TEXTURE_2D, B[i - 1].t); gl.uniform2f(P.down.u.uTexel, 1 / B[i - 1].w, 1 / B[i - 1].h); drawFS(); }
     gl.useProgram(P.up.p); gl.uniform1i(P.up.u.uTex, 0); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
@@ -3267,7 +3379,7 @@ function tick(now) {
 
   // ---- labels
   AIR.planes.forEach((p, i) => { const l = S.airLabels[i]; if (p.pos && l) { l.x = p.pos[0]; l.y = p.pos[1] + 6; l.z = p.pos[2]; } });
-  const cw = canvas.clientWidth, ch = canvas.clientHeight, placed = [];
+  const cw = VIEW.cw, ch = VIEW.ch, placed = [];
   const order = S.labels.slice().sort((a, b) => b.prio - a.prio);
   for (const l of order) {
     const y = l.dyn ? l.y : l.y * S.rise;

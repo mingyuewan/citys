@@ -29,6 +29,12 @@
 | `tools/build.sh` | 一键重建 |
 | `tools/record.py` | 逐帧录制演示视频（Playwright + 无头 Chromium） |
 | `tools/patches/` | 开发过程中各轮修改的脚本（仅供参考） |
+| `assets/textures/` | 内置 GPT Image 生成的岩层、幕墙、云朵纹理（提示词见 `assets/image-prompts.json`） |
+| `assets/web/` | 网页用的 512 px 版本（`tools/make_web_textures.py` 生成，组装时嵌入 `index.html`） |
+| `blender/shenzhen-bay.blend` | Blender 4.5 场景（几何取自页面实际生成结果，纹理已打包） |
+| `tools/blender/` | 几何导出、场景构建、渲染脚本 |
+| `tools/webgl_check.py` | WebGL 冒烟测试与 A/B 帧时间基准 |
+| `renders/` | Blender 渲染成品 |
 | `CLAUDE.md` | 给 Claude Code 的项目说明、坐标系和下一步计划 |
 
 ## 重建
@@ -40,7 +46,25 @@ pip install numpy opencv-python pillow
 bash tools/build.sh /tmp/pygeo/shapefile
 ```
 
-只改了页面源码时，直接 `bash tools/build.sh` 即可。
+只改了页面源码时，直接 `bash tools/build.sh` 即可。替换了 `assets/textures/` 里的纹理后，先运行 `python tools/make_web_textures.py`（需要 Pillow），再执行 `bash tools/build.sh`。
+
+## Blender 场景与渲染
+
+```bash
+python3 -m http.server 8765 --bind 127.0.0.1                         # 在项目根目录启动
+python tools/blender/export_scene.py                                  # 从页面读回实际几何 → build/blender_export/
+blender -b --factory-startup --python tools/blender/build_scene.py    # → blender/shenzhen-bay.blend
+blender -b blender/shenzhen-bay.blend --python tools/blender/render.py -- overview city --res 1600x900 --samples 128
+```
+
+导出脚本需要 Playwright 和本机 Chrome。场景按“城市 / 岛屿 / 地面与海湾 / 实例 / 云与天空”分集合组织，树、车、路灯、云朵都用几何节点实例化。版本、采样设置、素材用途和测试结果见 `docs/render-notes.md`。
+
+## 测试
+
+```bash
+python tools/webgl_check.py http://127.0.0.1:8765/index.html --fallbacks   # 启动、日夜、拾取、窗口尺寸、回退路径
+python tools/webgl_check.py <基线URL> <新版URL> --frames 60 --dynres       # A/B 帧时间与动态分辨率重分配
+```
 
 ## 数据说明
 
@@ -50,4 +74,4 @@ bash tools/build.sh /tmp/pygeo/shapefile
 
 ## 下一步
 
-计划用 Blender 精细建模地标与岛体、烘焙光照后导出 glb，再在页面中加载替换程序生成的版本，详见 `CLAUDE.md`。
+Blender 场景已经建好（见上文）。后续可以在其中精细化地标与岛体、烘焙光照后导出 glb，再在页面中加载替换程序生成的版本，详见 `CLAUDE.md`。

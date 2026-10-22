@@ -4,3 +4,4 @@ __pycache__/
 frames/
 *.mp4
 .DS_Store
+*.blend[0-9]*
