@@ -1,0 +1,1388 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="night">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>深圳湾空中城市</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed WebGL scene; a title plate top-left, a control rail bottom-left, an info card top-right. UI theme follows the scene's day/night. */
+:root {
+  --ink: #e9ecf2;
+  --ink-dim: #9aa5b8;
+  --panel: rgba(12, 17, 28, 0.72);
+  --panel-line: rgba(160, 180, 210, 0.18);
+  --accent: #f2a541;      /* sodium streetlight amber */
+  --accent-ink: #1b1305;
+  --bay: #3fa7a3;         /* bay water teal */
+  --bg: #070a12;
+  --danger: #ff7a6b;
+  --f-display: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html[data-mode="day"] {
+  --ink: #17202c;
+  --ink-dim: #566173;
+  --panel: rgba(250, 248, 243, 0.78);
+  --panel-line: rgba(40, 60, 80, 0.16);
+  --accent: #c8691a;
+  --accent-ink: #fff8ef;
+  --bay: #1f7f86;
+  --bg: #d9dfe4;
+  --danger: #b4321f;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#gl.dragging { cursor: grabbing; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  transition: background .6s, color .6s, border-color .6s;
+}
+
+/* Title plate */
+#plate {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px));
+  padding: 14px 18px 12px;
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+#plate .eyebrow {
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em;
+  color: var(--ink-dim); text-transform: uppercase;
+}
+#plate h1 {
+  margin: 4px 0 2px; font-family: var(--f-display); font-weight: 900;
+  font-size: clamp(26px, 4.2vw, 38px); line-height: 1.1; letter-spacing: .04em;
+  text-wrap: balance;
+}
+#plate h1 span { color: var(--accent); }
+#plate .coords { font-family: var(--f-mono); font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+#stats { margin-top: 8px; font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+#stats b { color: var(--ink); font-weight: 500; font-family: var(--f-mono); }
+
+/* Control rail */
+#rail {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 6px;
+  max-width: calc(100vw - 32px);
+}
+.btn {
+  appearance: none; border: 1px solid transparent; background: transparent; color: var(--ink);
+  font: 500 13px/1 var(--f-body); padding: 9px 12px; border-radius: 7px; cursor: pointer;
+  display: inline-flex; gap: 6px; align-items: center; white-space: nowrap;
+}
+.btn:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.btn:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.btn .k { font-family: var(--f-mono); font-size: 11px; opacity: .6; }
+.sep { width: 1px; height: 22px; background: var(--panel-line); margin: 0 2px; }
+select {
+  appearance: none; background: transparent; color: var(--ink); border: 1px solid var(--panel-line);
+  font: 500 13px/1 var(--f-body); padding: 8px 26px 8px 10px; border-radius: 7px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
+}
+select option { color: #111; }
+
+/* Info card */
+#card {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  width: min(300px, calc(100vw - 32px));
+  padding: 14px 16px;
+}
+#card h2 { margin: 0 28px 6px 0; font: 600 18px/1.3 var(--f-display); text-wrap: balance; }
+#card dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-size: 13px; }
+#card dt { color: var(--ink-dim); }
+#card dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+#card .est { color: var(--ink-dim); font-family: var(--f-body); font-size: 12px; }
+#card a { color: var(--accent); }
+#card .x { position: absolute; top: 8px; right: 8px; padding: 6px 8px; }
+
+/* Loader / errors */
+#loader {
+  position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#loader .box { pointer-events: auto; padding: 22px 24px; width: min(440px, 100%); }
+#loader h3 { margin: 0 0 6px; font: 600 17px/1.35 var(--f-display); }
+#loader p { margin: 6px 0; color: var(--ink-dim); line-height: 1.6; max-width: 62ch; }
+#loader .bar { height: 3px; background: var(--panel-line); border-radius: 2px; overflow: hidden; margin-top: 14px; }
+#loader .bar i { display: block; height: 100%; width: 30%; background: var(--accent); border-radius: 2px; animation: slide 1.4s ease-in-out infinite; }
+#loader .bar.done i { animation: none; width: 100%; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+#loader .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+#loader .row .btn { border-color: var(--panel-line); }
+#loader .err { color: var(--danger); font-family: var(--f-mono); font-size: 12px; white-space: pre-wrap; }
+#loader code { font-family: var(--f-mono); font-size: 12px; }
+
+/* Labels floating over the scene */
+#labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -100%);
+  white-space: nowrap; text-align: center; will-change: transform;
+  text-shadow: 0 1px 2px rgba(0,0,0,.65), 0 0 8px rgba(0,0,0,.45);
+  color: #f5f2ea; transition: opacity .3s;
+}
+html[data-mode="day"] .lbl { color: #1a2230; text-shadow: 0 0 3px rgba(255,255,255,.95), 0 0 9px rgba(255,255,255,.8); }
+.lbl.bld { font: 500 12px/1.25 var(--f-body); }
+.lbl.bld::after { content: ""; display: block; width: 1px; height: 14px; margin: 3px auto 0; background: currentColor; opacity: .55; }
+.lbl.bld small { display: block; font: 400 10.5px/1.2 var(--f-mono); opacity: .75; }
+.lbl.area { font: 600 15px/1 var(--f-display); letter-spacing: .5em; transform: translate(-50%, -50%); opacity: .85; }
+.lbl.sea { font: 600 20px/1 var(--f-display); letter-spacing: .9em; color: #bfe6e4; transform: translate(-50%, -50%); }
+html[data-mode="day"] .lbl.sea { color: #0f5b61; }
+
+#hint {
+  position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  font-size: 12px; color: var(--ink-dim); padding: 8px 12px; line-height: 1.6;
+}
+#hint b { color: var(--ink); font-weight: 500; }
+#credit { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+#credit a { color: inherit; pointer-events: auto; }
+
+@media (max-width: 720px) {
+  #hint { display: none; }
+  #card { top: auto; bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
+  label[for="selR"] { display: none; }
+  #stats { font-size: 11px; }
+  .btn .k { display: none; }
+  #plate { padding: 10px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #loader .bar i { animation: none; width: 100%; opacity: .5; }
+}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-label="深圳湾 3D 城市场景"></canvas>
+<div id="labels" aria-hidden="true"></div>
+
+<header id="plate" class="panel">
+  <div class="eyebrow">Shenzhen Bay · 南山 · OSM 3D</div>
+  <h1>深圳湾<span>·</span>空中城市</h1>
+  <div class="coords" id="coords">22.5130°N 113.9450°E</div>
+  <div id="stats">正在准备…</div>
+  <div id="credit">地图数据 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 贡献者</a></div>
+</header>
+
+<nav id="rail" class="panel" aria-label="视图控制">
+  <button class="btn" id="bMode" type="button" aria-pressed="false" title="切换白天/夜晚 (N)">夜景 <span class="k">N</span></button>
+  <button class="btn" id="bOrbit" type="button" aria-pressed="false" title="自动环绕 (R)">环绕 <span class="k">R</span></button>
+  <button class="btn" id="bTall" type="button" title="飞到最高楼 (T)">最高楼 <span class="k">T</span></button>
+  <button class="btn" id="bHome" type="button" title="回到总览 (H)">总览 <span class="k">H</span></button>
+  <span class="sep" aria-hidden="true"></span>
+  <label for="selR" class="btn" style="padding-right:4px;cursor:default">范围</label>
+  <select id="selR" aria-label="加载范围">
+    <option value="1500">半径 1.5 km</option>
+    <option value="2500" selected>半径 2.5 km</option>
+    <option value="4000">半径 4 km</option>
+  </select>
+  <button class="btn" id="bReload" type="button" title="重新从 Overpass 获取">刷新数据</button>
+  <button class="btn" id="bImport" type="button" title="导入 Overpass JSON 文件">导入</button>
+  <input type="file" id="file" accept=".json,application/json" hidden>
+</nav>
+
+<aside id="card" class="panel" hidden aria-live="polite">
+  <button class="btn x" id="bClose" type="button" aria-label="关闭">✕</button>
+  <h2 id="cName">—</h2>
+  <dl id="cList"></dl>
+</aside>
+
+<div id="hint" class="panel">
+  <b>拖动</b> 平移 · <b>右键/Shift 拖动</b> 旋转 · <b>滚轮</b> 缩放 · <b>点击</b> 建筑查看
+</div>
+
+<div id="loader">
+  <div class="box panel" role="status">
+    <h3 id="lTitle">正在连接地图服务</h3>
+    <p id="lText">从 OpenStreetMap Overpass API 获取深圳湾周边的建筑、道路、海岸线与绿地。</p>
+    <div class="err" id="lErr" hidden></div>
+    <div class="bar" id="lBar"><i></i></div>
+    <div class="row" id="lRow" hidden>
+      <button class="btn" id="lRetry" type="button">重试</button>
+      <button class="btn" id="lImport" type="button">导入 JSON 文件</button>
+      <button class="btn" id="lCopy" type="button">复制查询语句</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   深圳湾空中城市 — OSM → WebGL2, no dependencies.
+   Data: Overpass API (fetched live in the browser), cached in IndexedDB.
+   ========================================================================= */
+
+const CENTER = { lat: 22.5130, lon: 113.9450 };   // 后海 / 深圳湾体育中心一带
+const ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter"
+];
+const KY = 110574, KX = 111320 * Math.cos(CENTER.lat * Math.PI / 180);
+const $ = s => document.querySelector(s);
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let RADIUS = 2500;
+try { const r = +localStorage.getItem("szbay.radius"); if ([1500, 2500, 4000].includes(r)) RADIUS = r; } catch (e) {}
+$("#selR").value = String(RADIUS);
+
+function bboxFor(r) {
+  const dLat = r / KY, dLon = r / KX;
+  return { s: CENTER.lat - dLat, w: CENTER.lon - dLon, n: CENTER.lat + dLat, e: CENTER.lon + dLon };
+}
+function buildQuery(r) {
+  const b = bboxFor(r);
+  const bb = `(${b.s.toFixed(5)},${b.w.toFixed(5)},${b.n.toFixed(5)},${b.e.toFixed(5)})`;
+  return `[out:json][timeout:150];
+(
+  way["building"]${bb};
+  relation["building"]["type"="multipolygon"]${bb};
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|footway|cycleway|path|pedestrian)$"]${bb};
+  way["natural"~"^(water|wood|scrub|wetland|grassland|beach)$"]${bb};
+  relation["natural"~"^(water|wetland)$"]${bb};
+  way["waterway"="riverbank"]${bb};
+  way["leisure"~"^(park|garden|golf_course|pitch|nature_reserve)$"]${bb};
+  relation["leisure"~"^(park|nature_reserve)$"]${bb};
+  way["landuse"~"^(grass|forest|recreation_ground|meadow|village_green)$"]${bb};
+  way["natural"="coastline"]${bb};
+  node["place"~"^(suburb|neighbourhood|quarter|island)$"]${bb};
+  nwr["natural"="bay"]${bb};
+);
+out geom qt;`;
+}
+
+/* ---------------- UI helpers ---------------- */
+const loader = {
+  show(title, text, opts = {}) {
+    $("#loader").hidden = false;
+    $("#lTitle").textContent = title;
+    $("#lText").textContent = text || "";
+    $("#lErr").hidden = !opts.err; $("#lErr").textContent = opts.err || "";
+    $("#lRow").hidden = !opts.actions;
+    $("#lBar").hidden = !!opts.actions;
+    $("#lBar").classList.toggle("done", !!opts.done);
+  },
+  hide() { $("#loader").hidden = true; }
+};
+const fmt = n => n.toLocaleString("zh-CN");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------------- IndexedDB cache ---------------- */
+const cache = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    this.db = await new Promise((res, rej) => {
+      const q = indexedDB.open("szbay3d", 1);
+      q.onupgradeneeded = () => q.result.createObjectStore("osm");
+      q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+    });
+    return this.db;
+  },
+  async get(k) {
+    try {
+      const db = await this.open();
+      return await new Promise((res) => {
+        const r = db.transaction("osm").objectStore("osm").get(k);
+        r.onsuccess = () => res(r.result || null); r.onerror = () => res(null);
+      });
+    } catch (e) { return null; }
+  },
+  async set(k, v) {
+    try {
+      const db = await this.open();
+      await new Promise((res) => {
+        const t = db.transaction("osm", "readwrite"); t.objectStore("osm").put(v, k);
+        t.oncomplete = res; t.onerror = res;
+      });
+    } catch (e) {}
+  }
+};
+
+/* ---------------- Fetch from Overpass ---------------- */
+async function fetchOverpass(r) {
+  const q = buildQuery(r);
+  const errors = [];
+  for (const url of ENDPOINTS) {
+    const host = new URL(url).host;
+    loader.show("正在连接地图服务", `请求 ${host} …（深圳湾 半径 ${r / 1000} km，首次可能需要 20–60 秒）`);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 150000);
+    try {
+      const resp = await fetch(url, {
+        method: "POST", signal: ctl.signal,
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+        body: "data=" + encodeURIComponent(q)
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      let text;
+      if (resp.body && resp.body.getReader) {
+        const reader = resp.body.getReader(); const chunks = []; let got = 0, last = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value); got += value.length;
+          if (performance.now() - last > 150) {
+            last = performance.now();
+            loader.show("正在下载地图数据", `${host} · 已接收 ${(got / 1048576).toFixed(1)} MB`);
+          }
+        }
+        const all = new Uint8Array(got); let o = 0;
+        for (const c of chunks) { all.set(c, o); o += c.length; }
+        text = new TextDecoder().decode(all);
+      } else text = await resp.text();
+      clearTimeout(timer);
+      const data = JSON.parse(text);
+      if (!data.elements) throw new Error("返回内容不是 Overpass JSON");
+      if (data.remark && /runtime error|timed out/i.test(data.remark) && data.elements.length < 50) throw new Error(data.remark.slice(0, 120));
+      return data;
+    } catch (e) {
+      clearTimeout(timer);
+      errors.push(`${host}: ${e.name === "AbortError" ? "超时" : (e.message || String(e))}`);
+    }
+  }
+  const err = new Error("all endpoints failed"); err.details = errors; throw err;
+}
+
+/* ---------------- Parsing ---------------- */
+const P = (lat, lon) => [(lon - CENTER.lon) * KX, (CENTER.lat - lat) * KY]; // [x east, z south] metres
+const geomToPts = g => (g || []).filter(Boolean).map(p => P(p.lat, p.lon));
+
+function joinWays(segs) {
+  // join open polylines into rings by matching endpoints
+  const rings = [], open = segs.filter(s => s.length > 1).map(s => s.slice());
+  const same = (a, b) => Math.abs(a[0] - b[0]) < 0.05 && Math.abs(a[1] - b[1]) < 0.05;
+  while (open.length) {
+    let cur = open.shift();
+    let guard = 0;
+    while (!same(cur[0], cur[cur.length - 1]) && guard++ < 10000) {
+      const end = cur[cur.length - 1];
+      let k = open.findIndex(s => same(s[0], end) || same(s[s.length - 1], end));
+      if (k < 0) break;
+      let s = open.splice(k, 1)[0];
+      if (!same(s[0], end)) s = s.reverse();
+      cur = cur.concat(s.slice(1));
+    }
+    rings.push(cur);
+  }
+  return rings;
+}
+
+function nameOf(t) { return t && (t["name:zh"] || t["name:zh-Hans"] || t.name || t["name:en"]) || ""; }
+
+function parseHeight(t, area) {
+  let h = NaN, known = false;
+  if (t.height) { h = parseFloat(String(t.height).replace(",", ".")); known = isFinite(h); }
+  if (!known && t["building:levels"]) {
+    const l = parseFloat(t["building:levels"]);
+    if (isFinite(l)) { h = l * 3.3 + (parseFloat(t["roof:levels"]) || 0) * 3; known = true; }
+  }
+  const minH = parseFloat(t.min_height) || (parseFloat(t["building:min_level"]) || 0) * 3.3 || 0;
+  if (!known) {
+    const type = t.building;
+    const d = { house: 8, detached: 8, residential: 24, apartments: 36, commercial: 22, office: 30, retail: 12,
+      industrial: 14, warehouse: 12, school: 16, university: 20, hospital: 26, hotel: 40, roof: 6, construction: 12,
+      garage: 4, service: 5, kiosk: 4, shed: 4, hut: 4, train_station: 18, stadium: 30, sports_centre: 24 }[type];
+    if (d) h = d;
+    else h = area < 120 ? 7 : area < 600 ? 12 + (area % 7) * 2 : 18 + (area % 11) * 2.2;
+  }
+  return { h: Math.max(h, minH + 2.5), minH, known };
+}
+
+function ringArea(r) { let a = 0; for (let i = 0, n = r.length; i < n; i++) { const p = r[i], q = r[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+function centroid(r) { let x = 0, z = 0; for (const p of r) { x += p[0]; z += p[1]; } return [x / r.length, z / r.length]; }
+
+function parseOSM(data) {
+  const out = { buildings: [], roads: [], areas: [], water: [], coast: [], places: [] };
+  const MAJOR = /^(motorway|trunk|primary|secondary)(_link)?$/;
+  for (const el of data.elements) {
+    const t = el.tags || {};
+    if (el.type === "node") {
+      if (t.place && nameOf(t)) out.places.push({ name: nameOf(t), kind: t.place, p: P(el.lat, el.lon) });
+      else if (t.natural === "bay" && nameOf(t)) out.places.push({ name: nameOf(t), kind: "bay", p: P(el.lat, el.lon) });
+      continue;
+    }
+    if (t.natural === "bay") {
+      if (nameOf(t) && el.bounds) out.places.push({ name: nameOf(t), kind: "bay", p: P((el.bounds.minlat + el.bounds.maxlat) / 2, (el.bounds.minlon + el.bounds.maxlon) / 2) });
+      continue;
+    }
+    // rings for areas
+    let outers = [], inners = [];
+    if (el.type === "way") {
+      const pts = geomToPts(el.geometry);
+      if (t.highway) {
+        if (t.tunnel && t.tunnel !== "no") continue;
+        if (t.area === "yes") continue;
+        const hw = t.highway;
+        out.roads.push({ pts, hw, major: MAJOR.test(hw), bridge: !!(t.bridge && t.bridge !== "no"), oneway: t.oneway === "yes" || /motorway/.test(hw), name: nameOf(t) });
+        continue;
+      }
+      if (t.natural === "coastline") { out.coast.push(pts); continue; }
+      outers = [pts];
+    } else if (el.type === "relation") {
+      const o = [], i = [];
+      for (const m of el.members || []) {
+        if (m.type !== "way" || !m.geometry) continue;
+        (m.role === "inner" ? i : o).push(geomToPts(m.geometry));
+      }
+      outers = joinWays(o); inners = joinWays(i);
+    }
+    outers = outers.filter(r => r.length >= 3);
+    if (!outers.length) continue;
+
+    if (t.building) {
+      if (t.building === "no") continue;
+      for (let r of outers) {
+        if (r.length > 3 && Math.abs(r[0][0] - r[r.length - 1][0]) < 0.01 && Math.abs(r[0][1] - r[r.length - 1][1]) < 0.01) r = r.slice(0, -1);
+        if (r.length < 3) continue;
+        const a = Math.abs(ringArea(r));
+        if (a < 8) continue;
+        const hh = parseHeight(t, a);
+        out.buildings.push({ ring: r, area: a, ...hh, id: el.id, type: el.type, tags: t, name: nameOf(t) });
+      }
+    } else if (t.natural === "water" || t.waterway === "riverbank" || t.natural === "wetland" && t.wetland !== "mangrove") {
+      out.water.push({ outers, inners, wet: t.natural === "wetland" });
+    } else if (t.natural === "wetland" || t.natural === "beach") {
+      out.areas.push({ outers, inners, kind: t.natural === "beach" ? "beach" : "green", name: nameOf(t) });
+    } else {
+      out.areas.push({ outers, inners, kind: "green", name: nameOf(t), park: t.leisure === "park" || t.leisure === "nature_reserve" });
+    }
+  }
+  return out;
+}
+
+/* ---------------- Ground texture (class map) ----------------
+   R = water, G = vegetation, B = road (≈60 path, ≈140 minor, 255 major) */
+function buildGroundTexture(osm, R, S) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = S;
+  const g = cv.getContext("2d");
+  const k = S / (2 * R);
+  const X = p => (p[0] + R) * k, Z = p => (p[1] + R) * k;
+
+  // --- coastline flood fill for the sea ---
+  const sea = new Uint8Array(S * S);
+  if (osm.coast.length) {
+    g.fillStyle = "#000"; g.fillRect(0, 0, S, S);
+    g.strokeStyle = "#fff"; g.lineWidth = Math.max(2.5, S / 1600); g.lineJoin = "round"; g.lineCap = "round";
+    g.beginPath();
+    for (const l of osm.coast) { l.forEach((p, i) => i ? g.lineTo(X(p), Z(p)) : g.moveTo(X(p), Z(p))); }
+    g.stroke();
+    const img = g.getImageData(0, 0, S, S).data;
+    const wall = new Uint8Array(S * S);
+    for (let i = 0; i < S * S; i++) wall[i] = img[i * 4] > 20 ? 1 : 0;
+    
+    const fill = (sx, sy) => {
+      if (sx < 0 || sy < 0 || sx >= S || sy >= S) return;
+      const s0 = sy * S + sx; if (wall[s0] || sea[s0]) return;
+      const stack = [s0];
+      while (stack.length) {
+        const i = stack.pop(); const y = (i / S) | 0; let x = i - y * S;
+        let l = x; while (l > 0 && !wall[y * S + l - 1] && !sea[y * S + l - 1]) l--;
+        let r = x; while (r < S - 1 && !wall[y * S + r + 1] && !sea[y * S + r + 1]) r++;
+        for (let xx = l; xx <= r; xx++) sea[y * S + xx] = 1;
+        for (const ny of [y - 1, y + 1]) {
+          if (ny < 0 || ny >= S) continue;
+          let inRun = false;
+          for (let xx = l; xx <= r; xx++) {
+            const j = ny * S + xx; const ok = !wall[j] && !sea[j];
+            if (ok && !inRun) { stack.push(j); inRun = true; } else if (!ok) inRun = false;
+          }
+        }
+      }
+    };
+    const off = Math.max(4, S / 900);
+    for (const l of osm.coast) {
+      for (let i = 0; i + 1 < l.length; i++) {
+        const a = [X(l[i]), Z(l[i])], b = [X(l[i + 1]), Z(l[i + 1])];
+        const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+        if (len < 1e-3) continue;
+        // OSM coastline: land left, water right. Canvas y points south → right normal = (-dy, dx)
+        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        fill(Math.round(mx - dy / len * off), Math.round(my + dx / len * off));
+      }
+    }
+    // close the 1-px coastline seam into the sea
+    for (let i = 0; i < S * S; i++) if (wall[i]) {
+      const x = i % S, y = (i / S) | 0;
+      if ((x > 0 && sea[i - 1] === 1) || (x < S - 1 && sea[i + 1] === 1) || (y > 0 && sea[i - S] === 1) || (y < S - 1 && sea[i + S] === 1)) sea[i] = 2;
+    }
+  }
+  const id = g.createImageData(S, S); const d = id.data;
+  let seaPx = 0;
+  for (let i = 0; i < S * S; i++) { const s = sea[i] ? 255 : 0; if (s) seaPx++; d[i * 4] = s; d[i * 4 + 3] = 255; }
+  if (seaPx > S * S * 0.92) { for (let i = 0; i < S * S; i++) d[i * 4] = 0; console.warn("[szbay] coastline fill looked wrong, skipped"); }
+  g.putImageData(id, 0, 0);
+
+  g.globalCompositeOperation = "lighten";
+  const poly = (o, inn, color) => {
+    g.fillStyle = color; g.beginPath();
+    for (const r of o.concat(inn || [])) { r.forEach((p, i) => i ? g.lineTo(X(p), Z(p)) : g.moveTo(X(p), Z(p))); g.closePath(); }
+    g.fill("evenodd");
+  };
+  for (const a of osm.areas) poly(a.outers, a.inners, a.kind === "beach" ? "rgb(0,70,0)" : "rgb(0,255,0)");
+  for (const w of osm.water) poly(w.outers, w.inners, w.wet ? "rgb(200,160,0)" : "rgb(255,0,0)");
+
+  const W = { motorway: 24, trunk: 20, primary: 15, secondary: 12, tertiary: 9, motorway_link: 8, trunk_link: 8, primary_link: 7,
+    secondary_link: 7, tertiary_link: 6, residential: 6, unclassified: 6, living_street: 5, pedestrian: 4, footway: 2, cycleway: 2.2, path: 1.8 };
+  const order = ["path", "footway", "cycleway", "pedestrian", "living_street", "residential", "unclassified", "tertiary_link", "tertiary",
+    "secondary_link", "primary_link", "trunk_link", "motorway_link", "secondary", "primary", "trunk", "motorway"];
+  g.lineJoin = "round"; g.lineCap = "round";
+  for (const hw of order) {
+    const lines = osm.roads.filter(r => r.hw === hw && !r._ribbon);
+    if (!lines.length) continue;
+    const isPath = /^(path|footway|cycleway)$/.test(hw), isMajor = /^(motorway|trunk|primary|secondary)/.test(hw);
+    g.strokeStyle = isMajor ? "rgb(0,0,255)" : isPath ? "rgb(0,0,64)" : "rgb(0,0,140)";
+    g.lineWidth = Math.max(isPath ? 0.9 : 1.2, W[hw] * k);
+    g.beginPath();
+    for (const r of lines) r.pts.forEach((p, i) => i ? g.lineTo(X(p), Z(p)) : g.moveTo(X(p), Z(p)));
+    g.stroke();
+  }
+  g.globalCompositeOperation = "source-over";
+  return cv;
+}
+
+/* ---------------- Triangulation (ear clipping) ---------------- */
+function triangulate(pts) {
+  const n = pts.length; if (n < 3) return [];
+  const idx = []; for (let i = 0; i < n; i++) idx.push(i);
+  if (ringArea(pts) < 0) idx.reverse();
+  if (n > 900) { const t = []; for (let i = 1; i + 1 < n; i++) t.push(idx[0], idx[i], idx[i + 1]); return t; }
+  const tris = [];
+  const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const inside = (p, a, b, c) => cross(a, b, p) >= 0 && cross(b, c, p) >= 0 && cross(c, a, p) >= 0;
+  let guard = 0, i = 0;
+  while (idx.length > 3 && guard < n * n) {
+    guard++;
+    const m = idx.length, i0 = idx[(i + m - 1) % m], i1 = idx[i % m], i2 = idx[(i + 1) % m];
+    const a = pts[i0], b = pts[i1], c = pts[i2];
+    let ear = cross(a, b, c) > 1e-9;
+    if (ear) for (let j = 0; j < m; j++) {
+      const v = idx[j]; if (v === i0 || v === i1 || v === i2) continue;
+      if (inside(pts[v], a, b, c)) { ear = false; break; }
+    }
+    if (ear) { tris.push(i0, i1, i2); idx.splice(i % m, 1); i = Math.max(0, i - 1); guard = 0; }
+    else i = (i + 1) % idx.length;
+    if (guard >= idx.length * 2 + 5) { // degenerate: fan the rest
+      for (let j = 1; j + 1 < idx.length; j++) tris.push(idx[0], idx[j], idx[j + 1]);
+      return tris;
+    }
+  }
+  if (idx.length === 3) tris.push(idx[0], idx[1], idx[2]);
+  return tris;
+}
+
+/* ---------------- Mesh building ---------------- */
+// vertex: pos3 nrm3 col3 uv2 bid1  (12 floats)
+function hash1(n) { n = Math.sin(n * 12.9898) * 43758.5453; return n - Math.floor(n); }
+const PALETTE = [[0.86, 0.84, 0.80], [0.80, 0.80, 0.78], [0.90, 0.88, 0.83], [0.74, 0.76, 0.78], [0.84, 0.80, 0.74], [0.93, 0.92, 0.90], [0.70, 0.72, 0.74]];
+function buildCity(osm) {
+  let nv = 0, ni = 0;
+  for (const b of osm.buildings) { const n = b.ring.length; nv += n * 4 + n; ni += n * 6 + (n - 2) * 3; }
+  const V = new Float32Array(nv * 12), I = new Uint32Array(ni);
+  let v = 0, ii = 0;
+  const push = (x, y, z, nx, ny, nz, c, u, w, bid) => {
+    const o = v * 12; V[o] = x; V[o + 1] = y; V[o + 2] = z; V[o + 3] = nx; V[o + 4] = ny; V[o + 5] = nz;
+    V[o + 6] = c[0]; V[o + 7] = c[1]; V[o + 8] = c[2]; V[o + 9] = u; V[o + 10] = w; V[o + 11] = bid; return v++;
+  };
+  osm.buildings.forEach((b, bid) => {
+    let r = b.ring; if (ringArea(r) < 0) r = r.slice().reverse(); // CCW in (x, -z)… keep consistent
+    const hs = hash1(b.id % 100000 + 0.37);
+    let c = PALETTE[Math.floor(hs * PALETTE.length)].slice();
+    if (b.h >= 90) { const t = hash1(b.id * 1.7); c = [0.55 + 0.1 * t, 0.66 + 0.06 * t, 0.74 + 0.04 * t]; } // glass towers
+    const roofC = c.map(x => x * 0.82);
+    const n = r.length; let per = 0;
+    for (let i = 0; i < n; i++) {
+      const a = r[i], q = r[(i + 1) % n];
+      const dx = q[0] - a[0], dz = q[1] - a[1], len = Math.hypot(dx, dz) || 1;
+      // ring area > 0 in (x,z) ⇒ outward normal = (dz, -dx)
+      const nx = dz / len, nz = -dx / len;
+      const v0 = push(a[0], b.minH, a[1], nx, 0, nz, c, per, b.minH, bid);
+      const v1 = push(q[0], b.minH, q[1], nx, 0, nz, c, per + len, b.minH, bid);
+      const v2 = push(q[0], b.h, q[1], nx, 0, nz, c, per + len, b.h, bid);
+      const v3 = push(a[0], b.h, a[1], nx, 0, nz, c, per, b.h, bid);
+      I[ii++] = v0; I[ii++] = v1; I[ii++] = v2; I[ii++] = v0; I[ii++] = v2; I[ii++] = v3;
+      per += len;
+    }
+    const base = v;
+    for (const p of r) push(p[0], b.h, p[1], 0, 1, 0, roofC, -1, b.h, bid);
+    const t = triangulate(r);
+    for (const k of t) I[ii++] = base + k;
+  });
+  return { V: V.subarray(0, v * 12), I: I.subarray(0, ii) };
+}
+
+// Elevated ribbons for long bridges (e.g. 深圳湾公路大桥) + pillars
+function buildBridges(osm) {
+  const verts = [], idx = [];
+  const lines = [];
+  for (const r of osm.roads) {
+    if (!r.bridge || !r.major) continue;
+    let L = 0; for (let i = 1; i < r.pts.length; i++) L += Math.hypot(r.pts[i][0] - r.pts[i - 1][0], r.pts[i][1] - r.pts[i - 1][1]);
+    if (L < 250) continue;
+    r._ribbon = true; r._len = L; lines.push(r);
+  }
+  const deck = 11, ramp = 160;
+  const hAt = (s, L) => deck * Math.min(1, s / ramp, (L - s) / ramp);
+  const col = [0.78, 0.77, 0.74];
+  const add = (x, y, z, nx, ny, nz, u) => { verts.push(x, y, z, nx, ny, nz, col[0], col[1], col[2], -2, u, -1); return verts.length / 12 - 1; };
+  for (const r of lines) {
+    const w = /motorway|trunk/.test(r.hw) ? 13 : 9; let s = 0;
+    let nextPillar = ramp;
+    for (let i = 0; i + 1 < r.pts.length; i++) {
+      const a = r.pts[i], b = r.pts[i + 1];
+      const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz); if (len < 0.01) continue;
+      const px = -dz / len * w / 2, pz = dx / len * w / 2;
+      const ya = hAt(s, r._len), yb = hAt(s + len, r._len);
+      const q = [add(a[0] + px, ya, a[1] + pz, 0, 1, 0, 0), add(a[0] - px, ya, a[1] - pz, 0, 1, 0, 0),
+                 add(b[0] - px, yb, b[1] - pz, 0, 1, 0, 0), add(b[0] + px, yb, b[1] + pz, 0, 1, 0, 0)];
+      idx.push(q[0], q[1], q[2], q[0], q[2], q[3]);
+      // side skirts
+      for (const sd of [1, -1]) {
+        const nx = sd * px / (w / 2), nz = sd * pz / (w / 2);
+        const e = [add(a[0] + sd * px, ya, a[1] + sd * pz, nx, 0, nz, 0), add(b[0] + sd * px, yb, b[1] + sd * pz, nx, 0, nz, 0),
+                   add(b[0] + sd * px, yb - 1.8, b[1] + sd * pz, nx, 0, nz, 0), add(a[0] + sd * px, ya - 1.8, a[1] + sd * pz, nx, 0, nz, 0)];
+        idx.push(e[0], e[1], e[2], e[0], e[2], e[3]);
+      }
+      while (nextPillar < s + len && nextPillar < r._len - ramp * 0.5) {
+        const f = (nextPillar - s) / len, cx = a[0] + dx * f, cz = a[1] + dz * f, top = hAt(nextPillar, r._len) - 1.8, hw = 1.4;
+        const sides = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+        for (const [sx, sz] of sides) {
+          const tx = -sz, tz = sx;
+          const p = [add(cx + sx * hw + tx * hw, 0, cz + sz * hw + tz * hw, sx, 0, sz, 0), add(cx + sx * hw - tx * hw, 0, cz + sz * hw - tz * hw, sx, 0, sz, 0),
+                     add(cx + sx * hw - tx * hw, top, cz + sz * hw - tz * hw, sx, 0, sz, 0), add(cx + sx * hw + tx * hw, top, cz + sz * hw + tz * hw, sx, 0, sz, 0)];
+          idx.push(p[0], p[1], p[2], p[0], p[2], p[3]);
+        }
+        nextPillar += 55;
+      }
+      s += len;
+    }
+  }
+  return { V: new Float32Array(verts), I: new Uint32Array(idx), lines, hAt };
+}
+
+/* ---------------- Traffic ---------------- */
+function buildTraffic(osm, bridges) {
+  const lines = [];
+  for (const r of osm.roads) {
+    if (!r.major && !/tertiary/.test(r.hw)) continue;
+    const cum = [0];
+    for (let i = 1; i < r.pts.length; i++) cum.push(cum[i - 1] + Math.hypot(r.pts[i][0] - r.pts[i - 1][0], r.pts[i][1] - r.pts[i - 1][1]));
+    const L = cum[cum.length - 1]; if (L < 40) continue;
+    lines.push({ r, cum, L, ribbon: !!r._ribbon, w: /motorway|trunk/.test(r.hw) ? 5 : 3 });
+  }
+  let total = lines.reduce((s, l) => s + l.L * (l.r.major ? 1 : 0.35), 0);
+  const N = Math.min(4000, Math.floor(total / 45));
+  const cars = [];
+  const weights = lines.map(l => l.L * (l.r.major ? 1 : 0.35));
+  for (let c = 0; c < N; c++) {
+    let t = Math.random() * total, k = 0; while (k < lines.length - 1 && t > weights[k]) { t -= weights[k]; k++; }
+    const l = lines[k];
+    const dir = l.r.oneway ? 1 : (Math.random() < 0.5 ? 1 : -1);
+    const lane = (l.r.oneway ? (Math.random() - 0.5) * 2 * l.w * 0.6 : l.w * (0.6 + Math.random() * 0.6));
+    cars.push({ l, s: Math.random() * l.L, dir, lane, v: (l.r.major ? 14 : 9) * (0.7 + Math.random() * 0.6), hue: Math.random() });
+  }
+  return { cars, buf: new Float32Array(cars.length * 6), hAt: bridges.hAt };
+}
+function stepTraffic(T, dt, night) {
+  const b = T.buf;
+  for (let i = 0; i < T.cars.length; i++) {
+    const c = T.cars[i], l = c.l;
+    c.s += c.v * dt * c.dir;
+    if (c.s > l.L) c.s -= l.L; if (c.s < 0) c.s += l.L;
+    let k = 1; while (k < l.cum.length - 1 && l.cum[k] < c.s) k++;
+    const a = l.r.pts[k - 1], q = l.r.pts[k], seg = (l.cum[k] - l.cum[k - 1]) || 1, f = (c.s - l.cum[k - 1]) / seg;
+    const dx = (q[0] - a[0]) / seg, dz = (q[1] - a[1]) / seg;
+    const side = c.dir > 0 ? 1 : -1;
+    const x = a[0] + (q[0] - a[0]) * f - dz * c.lane * side, z = a[1] + (q[1] - a[1]) * f + dx * c.lane * side;
+    const y = (l.ribbon ? T.hAt(c.s, l.L) : 0) + 1.6;
+    const o = i * 6; b[o] = x; b[o + 1] = y; b[o + 2] = z;
+    if (night) { if (c.dir > 0) { b[o + 3] = 1.0; b[o + 4] = 0.93; b[o + 5] = 0.78; } else { b[o + 3] = 1.0; b[o + 4] = 0.22; b[o + 5] = 0.14; } }
+    else { const h = c.hue; b[o + 3] = h < .3 ? 0.95 : h < .55 ? 0.25 : h < .75 ? 0.12 : 0.75; b[o + 4] = h < .3 ? 0.95 : h < .55 ? 0.27 : h < .75 ? 0.35 : 0.2; b[o + 5] = h < .3 ? 0.95 : h < .55 ? 0.3 : h < .75 ? 0.6 : 0.15; }
+  }
+}
+
+/* ---------------- Minimal mat4 ---------------- */
+const M = {
+  persp(fovy, asp, n, f) { const t = 1 / Math.tan(fovy / 2), nf = 1 / (n - f); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) * nf, -1, 0, 0, 2 * f * n * nf, 0]); },
+  lookAt(e, c, u) {
+    let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2], l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx; l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0, -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]);
+  },
+  mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+  inv(m) {
+    const a = m, o = new Float32Array(16);
+    const b00 = a[0] * a[5] - a[1] * a[4], b01 = a[0] * a[6] - a[2] * a[4], b02 = a[0] * a[7] - a[3] * a[4], b03 = a[1] * a[6] - a[2] * a[5],
+      b04 = a[1] * a[7] - a[3] * a[5], b05 = a[2] * a[7] - a[3] * a[6], b06 = a[8] * a[13] - a[9] * a[12], b07 = a[8] * a[14] - a[10] * a[12],
+      b08 = a[8] * a[15] - a[11] * a[12], b09 = a[9] * a[14] - a[10] * a[13], b10 = a[9] * a[15] - a[11] * a[13], b11 = a[10] * a[15] - a[11] * a[14];
+    let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06; det = 1 / det;
+    o[0] = (a[5] * b11 - a[6] * b10 + a[7] * b09) * det; o[1] = (a[2] * b10 - a[1] * b11 - a[3] * b09) * det;
+    o[2] = (a[13] * b05 - a[14] * b04 + a[15] * b03) * det; o[3] = (a[10] * b04 - a[9] * b05 - a[11] * b03) * det;
+    o[4] = (a[6] * b08 - a[4] * b11 - a[7] * b07) * det; o[5] = (a[0] * b11 - a[2] * b08 + a[3] * b07) * det;
+    o[6] = (a[14] * b02 - a[12] * b05 - a[15] * b01) * det; o[7] = (a[8] * b05 - a[10] * b02 + a[11] * b01) * det;
+    o[8] = (a[4] * b10 - a[5] * b08 + a[7] * b06) * det; o[9] = (a[1] * b08 - a[0] * b10 - a[3] * b06) * det;
+    o[10] = (a[12] * b04 - a[13] * b02 + a[15] * b00) * det; o[11] = (a[9] * b02 - a[8] * b04 - a[11] * b00) * det;
+    o[12] = (a[5] * b07 - a[4] * b09 - a[6] * b06) * det; o[13] = (a[0] * b09 - a[1] * b07 + a[2] * b06) * det;
+    o[14] = (a[13] * b01 - a[12] * b03 - a[14] * b00) * det; o[15] = (a[8] * b03 - a[9] * b01 + a[10] * b00) * det;
+    return o;
+  },
+  xf(m, x, y, z) { const w = m[3] * x + m[7] * y + m[11] * z + m[15]; return [(m[0] * x + m[4] * y + m[8] * z + m[12]) / w, (m[1] * x + m[5] * y + m[9] * z + m[13]) / w, (m[2] * x + m[6] * y + m[10] * z + m[14]) / w, w]; }
+};
+
+/* ---------------- WebGL setup ---------------- */
+const canvas = $("#gl");
+const gl = canvas.getContext("webgl2", { antialias: true, powerPreference: "high-performance" });
+if (!gl) {
+  loader.show("浏览器不支持 WebGL2", "请使用最新版 Chrome、Edge、Firefox 或 Safari 打开。", { actions: false, done: true });
+  throw new Error("no webgl2");
+}
+const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
+
+function compile(vs, fs) {
+  const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+
+const COMMON = `
+uniform float uNight; uniform vec3 uCam; uniform vec3 uFogDay; uniform vec3 uFogNight; uniform float uFogDen;
+vec3 fogIt(vec3 c, vec3 p){ float d = distance(p, uCam); float f = 1.0 - exp(-pow(d * uFogDen, 1.6)); return mix(c, mix(uFogDay, uFogNight, uNight), clamp(f,0.0,1.0)); }
+float h21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+float h31(vec3 p){ return h21(p.xy + p.z*17.13); }
+`;
+
+const meshVS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec3 aCol; layout(location=3) in vec2 aUv; layout(location=4) in float aBid;
+uniform mat4 uVP; uniform float uRise; uniform float uMaxR;
+out vec3 vPos; out vec3 vNrm; out vec3 vCol; out vec2 vUv; flat out float vBid;
+void main(){
+  vec3 p = aPos;
+  float d = length(p.xz) / uMaxR;
+  float g = clamp(uRise * 1.6 - d * 0.6, 0.0, 1.0); g = g*g*(3.0-2.0*g);
+  p.y *= max(g, 0.002);
+  vPos = p; vNrm = aNrm; vCol = aCol; vUv = aUv; vBid = aBid;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+
+const meshFS = `#version 300 es
+precision highp float;
+in vec3 vPos; in vec3 vNrm; in vec3 vCol; in vec2 vUv; flat in float vBid;
+uniform vec3 uSun; uniform float uSel; uniform float uTime; uniform vec3 uAccent;
+${COMMON}
+out vec4 o;
+void main(){
+  vec3 n = normalize(vNrm);
+  bool roof = vUv.x < -0.5 && vUv.x > -1.5;
+  bool bridge = vUv.x < -1.5;
+  bool wall = !roof && !bridge;
+  vec3 base = vCol;
+
+  // --- day lighting ---
+  float diff = max(dot(n, uSun), 0.0);
+  float hemi = mix(0.62, 1.0, n.y * 0.5 + 0.5);
+  float ao = wall ? mix(0.62, 1.0, smoothstep(0.0, 22.0, vPos.y)) : 1.0;
+  vec3 day = base * (hemi * 0.58 + diff * vec3(0.62, 0.58, 0.50)) * ao;
+
+  // --- night base ---
+  vec3 night = base * vec3(0.035, 0.045, 0.075) * (0.7 + 0.3 * hemi) * ao;
+  // light spill near the ground from streets
+  night += vec3(0.09, 0.055, 0.02) * (1.0 - smoothstep(0.0, 26.0, vPos.y)) * (wall ? 1.0 : 0.3);
+
+  if (wall) {
+    vec2 cell = vec2(vUv.x / 3.1, vUv.y / 3.4);
+    vec2 f = fract(cell), id = floor(cell);
+    vec2 fw = fwidth(cell);
+    float mx = smoothstep(0.16 - fw.x, 0.16 + fw.x, f.x) - smoothstep(0.84 - fw.x, 0.84 + fw.x, f.x);
+    float my = smoothstep(0.26 - fw.y, 0.26 + fw.y, f.y) - smoothstep(0.84 - fw.y, 0.84 + fw.y, f.y);
+    float fade = 1.0 - smoothstep(0.6, 1.5, max(fw.x, fw.y));
+    float win = mix(0.37, mx * my, fade);
+    float hb = h21(vec2(vBid, 7.1));
+    float hc = h31(vec3(id, vBid));
+    float litRatio = 0.22 + 0.4 * hb;
+    float lit = step(hc, litRatio);
+    // some buildings have bands lit by floor (offices)
+    if (hb > 0.82) lit = step(h21(vec2(id.y, vBid)), 0.6);
+    vec3 warm = mix(vec3(1.0, 0.72, 0.38), vec3(0.95, 0.92, 0.85), h31(vec3(id.yx, vBid + 3.0)));
+    if (hb > 0.9) warm = vec3(0.65, 0.85, 1.0);
+    float litAvg = litRatio;
+    float litF = mix(litAvg, lit, fade);
+    vec3 winNight = warm * litF * 1.9;
+    night = mix(night, winNight + night * 0.3, win);
+    vec3 glass = mix(vec3(0.30, 0.40, 0.50), vec3(0.62, 0.72, 0.80), clamp(n.z * 0.5 + 0.5, 0.0, 1.0));
+    day = mix(day, glass * (0.55 + 0.45 * diff + 0.15), win * 0.5);
+  }
+  if (roof) {
+    night = base * 0.045 + vec3(0.02, 0.022, 0.03);
+    float beacon = step(0.985, h21(vec2(vBid, 2.0))) * step(120.0, vPos.y);
+    night += vec3(1.0, 0.12, 0.08) * beacon * (0.5 + 0.5 * sin(uTime * 3.0 + vBid));
+  }
+  if (bridge) {
+    day = vec3(0.80, 0.79, 0.76) * (hemi * 0.6 + diff * 0.6);
+    night = n.y > 0.5 ? vec3(0.55, 0.36, 0.14) : vec3(0.05, 0.05, 0.07);
+  }
+  vec3 c = mix(day, night, uNight);
+  if (uSel >= 0.0 && abs(vBid - uSel) < 0.5) c = mix(c, uAccent * (0.9 + 0.25 * sin(uTime * 4.0)), 0.55);
+  o = vec4(fogIt(c, vPos), 1.0);
+}`;
+
+const pickFS = `#version 300 es
+precision highp float;
+flat in float vBid; in vec2 vUv;
+out vec4 o;
+void main(){
+  if (vBid < 0.0) { o = vec4(0.0); return; }
+  float id = vBid + 1.0;
+  o = vec4(mod(id, 256.0), mod(floor(id / 256.0), 256.0), floor(id / 65536.0), 255.0) / 255.0;
+}`;
+
+const groundVS = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aXZ;
+uniform mat4 uVP;
+out vec3 vPos;
+void main(){ vPos = vec3(aXZ.x, 0.0, aXZ.y); gl_Position = uVP * vec4(vPos, 1.0); }`;
+
+const groundFS = `#version 300 es
+precision highp float;
+in vec3 vPos;
+uniform sampler2D uTex; uniform float uR; uniform float uTime; uniform vec3 uSun;
+${COMMON}
+out vec4 o;
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
+void main(){
+  vec2 uv = (vPos.xz + uR) / (2.0 * uR);
+  vec4 t = texture(uTex, clamp(uv, 0.0, 1.0));
+  float edge = smoothstep(uR, uR - 350.0, max(abs(vPos.x), abs(vPos.z)));
+  t *= edge;
+  float w = t.r, g = t.g, r = t.b;
+  float major = smoothstep(0.72, 0.92, r);
+  float minor = smoothstep(0.42, 0.55, r) * (1.0 - major);
+  float path = smoothstep(0.12, 0.24, r) * (1.0 - major) * (1.0 - minor);
+
+  float n1 = vnoise(vPos.xz * 0.004) * 0.5 + vnoise(vPos.xz * 0.02) * 0.5;
+  // day palette
+  vec3 dLand = vec3(0.84, 0.82, 0.77) * (0.95 + 0.08 * n1);
+  vec3 dGreen = vec3(0.58, 0.70, 0.50) * (0.88 + 0.2 * n1);
+  float ripple = vnoise(vPos.xz * 0.05 + vec2(uTime * 0.25, uTime * 0.12)) * vnoise(vPos.xz * 0.11 - uTime * 0.2);
+  vec3 dWater = mix(vec3(0.33, 0.57, 0.62), vec3(0.42, 0.66, 0.70), n1) + vec3(0.25) * smoothstep(0.55, 0.9, ripple) * 0.5;
+  vec3 dMajor = vec3(0.98, 0.97, 0.94), dMinor = vec3(0.95, 0.94, 0.91), dPath = vec3(0.76, 0.72, 0.62);
+  // night palette
+  vec3 nLand = vec3(0.045, 0.05, 0.07);
+  vec3 nGreen = vec3(0.03, 0.065, 0.05);
+  vec3 nWater = vec3(0.012, 0.03, 0.06) + vec3(0.25, 0.17, 0.08) * smoothstep(0.6, 0.95, ripple) * 0.35;
+  vec3 nMajor = vec3(1.0, 0.60, 0.22) * 1.05, nMinor = vec3(0.62, 0.42, 0.20) * 0.8, nPath = vec3(0.22, 0.18, 0.12);
+
+  vec3 day = dLand; day = mix(day, dGreen, g); day = mix(day, dWater, w);
+  day = mix(day, dPath, path); day = mix(day, dMinor, minor); day = mix(day, dMajor, major);
+  vec3 night = nLand; night = mix(night, nGreen, g); night = mix(night, nWater, w);
+  night = mix(night, nPath, path); night = mix(night, nMinor, minor); night = mix(night, nMajor, major);
+  // soft glow around lit roads
+  night += vec3(0.08, 0.045, 0.015) * smoothstep(0.1, 0.6, r) * (1.0 - w);
+
+  vec3 c = mix(day * (0.78 + 0.22 * uSun.y), night, uNight);
+  vec3 outside = mix(vec3(0.80, 0.80, 0.77), vec3(0.03, 0.035, 0.05), uNight);
+  c = mix(outside, c, edge);
+  o = vec4(fogIt(c, vPos), 1.0);
+}`;
+
+const skyVS = `#version 300 es
+precision highp float;
+const vec2 P[3] = vec2[3](vec2(-1,-1), vec2(3,-1), vec2(-1,3));
+out vec2 vNdc;
+void main(){ vNdc = P[gl_VertexID]; gl_Position = vec4(P[gl_VertexID], 0.9999, 1.0); }`;
+const skyFS = `#version 300 es
+precision highp float;
+in vec2 vNdc;
+uniform mat4 uInvVP; uniform float uNight; uniform vec3 uFogDay; uniform vec3 uFogNight; uniform vec3 uSun;
+out vec4 o;
+void main(){
+  vec4 a = uInvVP * vec4(vNdc, -1.0, 1.0), b = uInvVP * vec4(vNdc, 1.0, 1.0);
+  vec3 d = normalize(b.xyz / b.w - a.xyz / a.w);
+  float h = clamp(d.y, -0.2, 1.0);
+  vec3 dayZ = vec3(0.36, 0.56, 0.80), nightZ = vec3(0.012, 0.016, 0.04);
+  vec3 day = mix(uFogDay, dayZ, pow(max(h, 0.0), 0.55));
+  day += vec3(1.0, 0.85, 0.6) * pow(max(dot(d, uSun), 0.0), 600.0) * 1.5 + vec3(1.0, 0.8, 0.5) * pow(max(dot(d, uSun), 0.0), 8.0) * 0.18;
+  vec3 night = mix(uFogNight, nightZ, pow(max(h, 0.0), 0.35));
+  night += vec3(0.25, 0.12, 0.05) * exp(-max(h, 0.0) * 18.0) * 0.6 * smoothstep(-0.06, 0.0, h); // city glow on the horizon
+  vec2 sp = floor(d.xz / max(d.y, 0.05) * 140.0);
+  night += vec3(0.8) * step(0.9975, fract(sin(dot(sp, vec2(12.9898, 78.233))) * 43758.5)) * smoothstep(0.15, 0.5, h);
+  o = vec4(mix(day, night, uNight), 1.0);
+}`;
+
+const carVS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aCol;
+uniform mat4 uVP; uniform vec3 uCam; uniform float uPx; uniform float uRise;
+out vec3 vCol;
+void main(){ vCol = aCol; gl_Position = uVP * vec4(aPos, 1.0);
+  float d = distance(aPos, uCam); gl_PointSize = clamp(uPx * 2600.0 / d, 1.6, 8.0) * step(0.85, uRise); }`;
+const carFS = `#version 300 es
+precision highp float;
+in vec3 vCol; uniform float uNight; out vec4 o;
+void main(){ vec2 c = gl_PointCoord - 0.5; float r = length(c); float a = smoothstep(0.5, 0.15, r);
+  o = vec4(vCol * mix(1.0, 1.6, uNight), a * mix(0.85, 1.0, uNight)); }`;
+
+const progMesh = compile(meshVS, meshFS);
+const progPick = compile(meshVS, pickFS);
+const progGround = compile(groundVS, groundFS);
+const progSky = compile(skyVS, skyFS);
+const progCar = compile(carVS, carFS);
+const skyVAO = gl.createVertexArray();
+
+function meshVAO(V, I) {
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW);
+  const S = 48; const L = [[0, 3, 0], [1, 3, 12], [2, 3, 24], [3, 2, 36], [4, 1, 44]];
+  for (const [loc, n, off] of L) { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, S, off); }
+  gl.bindVertexArray(null);
+  return { vao, count: I.length, bufs: [vb, ib] };
+}
+
+/* ---------------- Scene state ---------------- */
+const S = {
+  osm: null, city: null, bridge: null, ground: null, tex: null, traffic: null, carVAO: null, carBuf: null,
+  R: RADIUS, rise: 0, riseStart: 0,
+  night: 1, nightTarget: 1, orbit: false, sel: -1,
+  cam: { tx: 0, tz: 0, yaw: -0.55, pitch: 1.35, dist: 9000 },
+  fly: null, labels: [], tallest: -1
+};
+
+// Default mode follows Shenzhen local time (UTC+8)
+const szHour = (new Date().getUTCHours() + 8) % 24;
+S.nightTarget = S.night = (szHour >= 18 || szHour < 6) ? 1 : 0;
+applyModeUI();
+
+function applyModeUI() {
+  const night = S.nightTarget > 0.5;
+  document.documentElement.dataset.mode = night ? "night" : "day";
+  $("#bMode").setAttribute("aria-pressed", String(night));
+  $("#bMode").firstChild.textContent = night ? "夜景 " : "日景 ";
+}
+
+function disposeScene() {
+  for (const m of [S.city, S.bridge]) if (m) { gl.deleteVertexArray(m.vao); m.bufs.forEach(b => gl.deleteBuffer(b)); }
+  if (S.ground) { gl.deleteVertexArray(S.ground.vao); gl.deleteBuffer(S.ground.buf); }
+  if (S.tex) gl.deleteTexture(S.tex);
+  if (S.carVAO) { gl.deleteVertexArray(S.carVAO); gl.deleteBuffer(S.carBuf); }
+  S.city = S.bridge = S.ground = S.tex = S.carVAO = null; S.traffic = null;
+}
+
+async function buildScene(data) {
+  loader.show("正在解析地图数据", `共 ${fmt(data.elements.length)} 个 OSM 要素`);
+  await sleep(30);
+  const osm = parseOSM(data);
+  S.osm = osm;
+  loader.show("正在生成城市", `${fmt(osm.buildings.length)} 栋建筑 · ${fmt(osm.roads.length)} 条道路`);
+  await sleep(30);
+  S.ready = false;
+  disposeScene();
+
+  const bridges = buildBridges(osm);
+  const city = buildCity(osm);
+  S.city = meshVAO(city.V, city.I);
+  S.bridge = bridges.I.length ? meshVAO(bridges.V, bridges.I) : null;
+
+  loader.show("正在绘制地面", "海岸线、绿地与道路");
+  await sleep(30);
+  const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  const TS = Math.min(maxTex, 4096);
+  const cv = buildGroundTexture(osm, S.R, TS);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  S.tex = tex;
+
+  const G = S.R * 6;
+  const gvao = gl.createVertexArray(); gl.bindVertexArray(gvao);
+  const gbuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, gbuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-G, -G, G, -G, G, G, -G, -G, G, G, -G, G]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  S.ground = { vao: gvao, buf: gbuf };
+
+  S.traffic = buildTraffic(osm, bridges);
+  S.carVAO = gl.createVertexArray(); gl.bindVertexArray(S.carVAO);
+  S.carBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, S.carBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, S.traffic.buf.byteLength || 24, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+  gl.bindVertexArray(null);
+
+  // landmarks & labels
+  let tallest = -1, th = 0;
+  osm.buildings.forEach((b, i) => { if (b.h > th) { th = b.h; tallest = i; } });
+  S.tallest = tallest;
+  buildLabels(osm);
+
+  const known = osm.buildings.filter(b => b.known).length;
+  $("#stats").innerHTML = `<b>${fmt(osm.buildings.length)}</b> 栋建筑 · <b>${fmt(osm.roads.length)}</b> 条道路 · 车流 <b>${fmt(S.traffic.cars.length)}</b><br>其中 <b>${fmt(known)}</b> 栋有实测高度/层数，其余为估算`;
+  $("#coords").textContent = `${CENTER.lat.toFixed(4)}°N ${CENTER.lon.toFixed(4)}°E · 范围 ${(S.R * 2 / 1000).toFixed(1)}×${(S.R * 2 / 1000).toFixed(1)} km`;
+
+  S.sel = -1; $("#card").hidden = true;
+  S.rise = reduceMotion ? 1 : 0; S.riseStart = performance.now(); S.ready = true;
+  S.cam = { tx: 0, tz: 0, yaw: -0.55, pitch: 1.45, dist: S.R * 3.2 };
+  flyTo({ tx: 0, tz: 150, yaw: -0.62, pitch: 0.62, dist: S.R * 1.25 }, reduceMotion ? 0 : 4200);
+  loader.hide();
+}
+
+function buildLabels(osm) {
+  const box = $("#labels"); box.textContent = ""; S.labels = [];
+  const add = (cls, html, x, y, z, prio) => {
+    const el = document.createElement("div"); el.className = "lbl " + cls; el.innerHTML = html; el.style.opacity = "0"; box.appendChild(el);
+    S.labels.push({ el, x, y, z, prio, w: 0, h: 0 });
+  };
+  const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const inBox = p => Math.abs(p[0]) < S.R * 0.95 && Math.abs(p[1]) < S.R * 0.95;
+  const seen = new Set();
+  const named = osm.buildings.filter(b => b.name && b.h >= 60).sort((a, b) => b.h - a.h);
+  for (const b of named) {
+    if (seen.has(b.name) || S.labels.length >= 10) continue; seen.add(b.name);
+    const c = centroid(b.ring);
+    add("bld", `${esc(b.name)}<small>${Math.round(b.h)} m${b.known ? "" : " · 估"}</small>`, c[0], b.h + 6, c[1], 3);
+  }
+  for (const p of osm.places) {
+    if (!inBox(p.p) || seen.has(p.name)) continue; seen.add(p.name);
+    add(p.kind === "bay" ? "sea" : "area", esc(p.name), p.p[0], 30, p.p[1], p.kind === "bay" ? 5 : 1);
+  }
+  const parks = osm.areas.filter(a => a.park && a.name).map(a => ({ a, area: Math.abs(ringArea(a.outers[0])) })).sort((x, y) => y.area - x.area).slice(0, 3);
+  for (const { a } of parks) {
+    if (seen.has(a.name)) continue; seen.add(a.name);
+    const c = centroid(a.outers[0]); if (inBox(c)) add("area", esc(a.name), c[0], 20, c[1], 2);
+  }
+  requestAnimationFrame(() => S.labels.forEach(l => { l.w = l.el.offsetWidth; l.h = l.el.offsetHeight; }));
+}
+
+/* ---------------- Camera & input ---------------- */
+function flyTo(to, ms) {
+  const from = { ...S.cam };
+  if (!ms) { Object.assign(S.cam, to); S.fly = null; return; }
+  let dy = to.yaw - from.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+  S.fly = { from, to: { ...to, yaw: from.yaw + dy }, t0: performance.now(), ms };
+}
+function clampCam() {
+  const c = S.cam;
+  c.pitch = Math.min(1.52, Math.max(0.12, c.pitch));
+  c.dist = Math.min(S.R * 4, Math.max(60, c.dist));
+  const lim = S.R * 1.1; c.tx = Math.max(-lim, Math.min(lim, c.tx)); c.tz = Math.max(-lim, Math.min(lim, c.tz));
+}
+function eyePos() {
+  const c = S.cam, cp = Math.cos(c.pitch);
+  return [c.tx + Math.sin(c.yaw) * cp * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * cp * c.dist];
+}
+
+let drag = null; const pointers = new Map(); let pinch = null;
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  S.fly = null;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x), my: (a.y + b.y) / 2, cam: { ...S.cam } };
+    drag = null;
+  } else {
+    drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, rot: e.button === 2 || e.shiftKey || e.button === 1, moved: false };
+  }
+  canvas.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x), my = (a.y + b.y) / 2;
+    S.cam.dist = pinch.cam.dist * pinch.d / Math.max(d, 1);
+    S.cam.yaw = pinch.cam.yaw - (ang - pinch.ang);
+    S.cam.pitch = pinch.cam.pitch + (my - pinch.my) * 0.005;
+    clampCam(); return;
+  }
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+  if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 4) drag.moved = true;
+  if (drag.rot) { S.cam.yaw -= dx * 0.005; S.cam.pitch += dy * 0.004; }
+  else {
+    const k = S.cam.dist * 0.0018 * (900 / Math.max(600, canvas.clientHeight));
+    const cy = Math.cos(S.cam.yaw), sy = Math.sin(S.cam.yaw);
+    S.cam.tx += (-dx * cy - dy * sy) * k;
+    S.cam.tz += (dx * sy - dy * cy) * k;
+  }
+  clampCam();
+});
+const endPointer = e => {
+  if (drag && !drag.moved && pointers.size === 1 && e.type === "pointerup") pick(e.clientX, e.clientY);
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!pointers.size) { drag = null; canvas.classList.remove("dragging"); }
+};
+canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("wheel", e => { e.preventDefault(); S.fly = null; S.cam.dist *= Math.exp(e.deltaY * 0.0012); clampCam(); }, { passive: false });
+
+addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("select,input")) return;
+  const k = e.key.toLowerCase(), c = S.cam, step = c.dist * 0.04;
+  if (k === "n") toggleMode(); else if (k === "r") toggleOrbit(); else if (k === "t") flyTallest(); else if (k === "h") goHome();
+  else if (k === "w" || k === "arrowup") { c.tx -= Math.sin(c.yaw) * step; c.tz -= Math.cos(c.yaw) * step; }
+  else if (k === "s" || k === "arrowdown") { c.tx += Math.sin(c.yaw) * step; c.tz += Math.cos(c.yaw) * step; }
+  else if (k === "a" || k === "arrowleft") { c.tx -= Math.cos(c.yaw) * step; c.tz += Math.sin(c.yaw) * step; }
+  else if (k === "d" || k === "arrowright") { c.tx += Math.cos(c.yaw) * step; c.tz -= Math.sin(c.yaw) * step; }
+  else if (k === "q") c.yaw += 0.08; else if (k === "e") c.yaw -= 0.08;
+  else if (k === "escape") closeCard();
+  else return;
+  clampCam();
+});
+
+function toggleMode() { S.nightTarget = S.nightTarget > 0.5 ? 0 : 1; applyModeUI(); }
+function toggleOrbit() { S.orbit = !S.orbit; $("#bOrbit").setAttribute("aria-pressed", String(S.orbit)); }
+function goHome() { flyTo({ tx: 0, tz: 150, yaw: S.cam.yaw, pitch: 0.62, dist: S.R * 1.25 }, reduceMotion ? 0 : 1800); }
+function flyTallest() {
+  if (S.tallest < 0 || !S.osm) return;
+  const b = S.osm.buildings[S.tallest]; const c = centroid(b.ring);
+  flyTo({ tx: c[0], tz: c[1], yaw: S.cam.yaw + 0.6, pitch: 0.42, dist: Math.max(450, b.h * 3.2) }, reduceMotion ? 0 : 2400);
+  showCard(S.tallest);
+}
+$("#bMode").onclick = toggleMode; $("#bOrbit").onclick = toggleOrbit; $("#bTall").onclick = flyTallest; $("#bHome").onclick = goHome;
+$("#bClose").onclick = closeCard;
+function closeCard() { $("#card").hidden = true; S.sel = -1; }
+
+/* ---------------- Picking ---------------- */
+let pickFB = null, pickTex = null, pickDepth = null, pickW = 0, pickH = 0;
+function pick(cx, cy) {
+  if (!S.ready) return;
+  const W = canvas.width, H = canvas.height;
+  if (W !== pickW || H !== pickH || !pickFB) {
+    if (pickFB) { gl.deleteFramebuffer(pickFB); gl.deleteTexture(pickTex); gl.deleteRenderbuffer(pickDepth); }
+    pickFB = gl.createFramebuffer(); pickTex = gl.createTexture(); pickDepth = gl.createRenderbuffer();
+    gl.bindTexture(gl.TEXTURE_2D, pickTex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, pickDepth); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pickFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pickTex, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, pickDepth);
+    pickW = W; pickH = H;
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, pickFB);
+  gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+  gl.useProgram(progPick.p);
+  gl.uniformMatrix4fv(progPick.u.uVP, false, frame.vp); gl.uniform1f(progPick.u.uRise, S.rise); gl.uniform1f(progPick.u.uMaxR, S.R * 1.42);
+  gl.bindVertexArray(S.city.vao); gl.drawElements(gl.TRIANGLES, S.city.count, gl.UNSIGNED_INT, 0);
+  if (S.bridge) { gl.bindVertexArray(S.bridge.vao); gl.drawElements(gl.TRIANGLES, S.bridge.count, gl.UNSIGNED_INT, 0); }
+  const r = canvas.getBoundingClientRect(), dpr = W / r.width;
+  const px = new Uint8Array(4);
+  gl.readPixels(Math.floor((cx - r.left) * dpr), Math.floor(H - (cy - r.top) * dpr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const id = px[0] + px[1] * 256 + px[2] * 65536 - 1;
+  if (id >= 0 && id < S.osm.buildings.length) showCard(id); else closeCard();
+}
+
+const TYPE_ZH = { yes: "建筑", residential: "住宅", apartments: "公寓", commercial: "商业", office: "办公", retail: "零售", industrial: "工业",
+  school: "学校", university: "大学", hospital: "医院", hotel: "酒店", house: "住宅", stadium: "体育场", sports_centre: "体育中心",
+  construction: "在建", roof: "雨棚/顶棚", train_station: "车站", public: "公共建筑", government: "政府", warehouse: "仓库", civic: "市政" };
+function showCard(i) {
+  const b = S.osm.buildings[i]; S.sel = i;
+  const t = b.tags;
+  $("#cName").textContent = b.name || (TYPE_ZH[t.building] || "未命名建筑");
+  const rows = [];
+  rows.push(["高度", `${Math.round(b.h)} m ${b.known ? "" : '<span class="est">（估算）</span>'}`]);
+  if (t["building:levels"]) rows.push(["层数", t["building:levels"]]);
+  rows.push(["类型", TYPE_ZH[t.building] || t.building]);
+  rows.push(["占地", `${fmt(Math.round(b.area))} m²`]);
+  if (t["addr:street"]) rows.push(["地址", (t["addr:street"] || "") + (t["addr:housenumber"] ? " " + t["addr:housenumber"] : "")]);
+  if (t["name:en"] && t["name:en"] !== b.name) rows.push(["英文名", t["name:en"]]);
+  rows.push(["OSM", `<a href="https://www.openstreetmap.org/${b.type}/${b.id}" target="_blank" rel="noopener">${b.type}/${b.id}</a>`]);
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  $("#cList").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${k === "OSM" || k === "高度" ? v : esc(v)}</dd>`).join("");
+  $("#card").hidden = false;
+}
+
+/* ---------------- Render loop ---------------- */
+const frame = { vp: new Float32Array(16) };
+const FOG_DAY = [0.82, 0.86, 0.89], FOG_NIGHT = [0.055, 0.06, 0.10];
+const SUN = (() => { const v = [0.45, 0.62, 0.64]; const l = Math.hypot(...v); return v.map(x => x / l); })();
+let last = performance.now();
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  resize();
+  // transitions
+  S.night += (S.nightTarget - S.night) * Math.min(1, dt * 2.4);
+  if (S.ready && S.rise < 1) S.rise = Math.min(1, (now - S.riseStart) / 3600);
+  if (S.fly) {
+    const f = S.fly, t = Math.min(1, (now - f.t0) / f.ms), e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    for (const k of ["tx", "tz", "yaw", "pitch"]) S.cam[k] = f.from[k] + (f.to[k] - f.from[k]) * e;
+    S.cam.dist = Math.exp(Math.log(f.from.dist) + (Math.log(f.to.dist) - Math.log(f.from.dist)) * e);
+    if (t >= 1) S.fly = null;
+  } else if (S.orbit && !drag && !pinch) S.cam.yaw += dt * 0.06;
+
+  const W = canvas.width, H = canvas.height;
+  const eye = eyePos();
+  const near = Math.max(2, S.cam.dist * 0.01), far = S.R * 14;
+  const proj = M.persp(0.78, W / H, near, far);
+  const view = M.lookAt(eye, [S.cam.tx, 0, S.cam.tz], [0, 1, 0]);
+  const vp = M.mul(proj, view); frame.vp = vp;
+  const fogDen = 1 / (S.R * (2.4 + 1.2 * (1 - S.night)));
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.disable(gl.CULL_FACE);
+
+  // sky
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+  gl.useProgram(progSky.p);
+  gl.uniformMatrix4fv(progSky.u.uInvVP, false, M.inv(vp));
+  gl.uniform1f(progSky.u.uNight, S.night); gl.uniform3fv(progSky.u.uFogDay, FOG_DAY); gl.uniform3fv(progSky.u.uFogNight, FOG_NIGHT); gl.uniform3fv(progSky.u.uSun, SUN);
+  gl.bindVertexArray(skyVAO); gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  if (!S.ready) return;
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  const common = (pr) => {
+    gl.uniform1f(pr.u.uNight, S.night); gl.uniform3fv(pr.u.uCam, eye); gl.uniform3fv(pr.u.uFogDay, FOG_DAY); gl.uniform3fv(pr.u.uFogNight, FOG_NIGHT); gl.uniform1f(pr.u.uFogDen, fogDen);
+  };
+  // ground
+  gl.useProgram(progGround.p); common(progGround);
+  gl.uniformMatrix4fv(progGround.u.uVP, false, vp); gl.uniform1f(progGround.u.uR, S.R); gl.uniform1f(progGround.u.uTime, now / 1000); gl.uniform3fv(progGround.u.uSun, SUN);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, S.tex); gl.uniform1i(progGround.u.uTex, 0);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(2, 2);
+  gl.bindVertexArray(S.ground.vao); gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+
+  // buildings + bridges
+  gl.useProgram(progMesh.p); common(progMesh);
+  gl.uniformMatrix4fv(progMesh.u.uVP, false, vp); gl.uniform1f(progMesh.u.uRise, S.rise); gl.uniform1f(progMesh.u.uMaxR, S.R * 1.42);
+  gl.uniform3fv(progMesh.u.uSun, SUN); gl.uniform1f(progMesh.u.uSel, S.sel); gl.uniform1f(progMesh.u.uTime, now / 1000);
+  gl.uniform3fv(progMesh.u.uAccent, S.night > 0.5 ? [0.95, 0.65, 0.25] : [0.78, 0.41, 0.10]);
+  gl.bindVertexArray(S.city.vao); gl.drawElements(gl.TRIANGLES, S.city.count, gl.UNSIGNED_INT, 0);
+  if (S.bridge) { gl.bindVertexArray(S.bridge.vao); gl.drawElements(gl.TRIANGLES, S.bridge.count, gl.UNSIGNED_INT, 0); }
+
+  // traffic
+  if (S.traffic && S.traffic.cars.length) {
+    stepTraffic(S.traffic, reduceMotion ? 0 : dt, S.night > 0.5);
+    gl.bindBuffer(gl.ARRAY_BUFFER, S.carBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, S.traffic.buf);
+    gl.useProgram(progCar.p);
+    gl.uniformMatrix4fv(progCar.u.uVP, false, vp); gl.uniform3fv(progCar.u.uCam, eye); gl.uniform1f(progCar.u.uPx, H / 900); gl.uniform1f(progCar.u.uNight, S.night); gl.uniform1f(progCar.u.uRise, S.rise);
+    gl.enable(gl.BLEND); gl.depthMask(false);
+    if (S.night > 0.5) gl.blendFunc(gl.SRC_ALPHA, gl.ONE); else gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(S.carVAO); gl.drawArrays(gl.POINTS, 0, S.traffic.cars.length);
+    gl.depthMask(true); gl.disable(gl.BLEND);
+  }
+  gl.bindVertexArray(null);
+
+  // labels (screen projection with simple overlap culling)
+  const cw = canvas.clientWidth, ch = canvas.clientHeight, placed = [];
+  const order = S.labels.slice().sort((a, b) => b.prio - a.prio);
+  for (const l of order) {
+    const y = l.y * S.rise;
+    const p = M.xf(vp, l.x, y, l.z);
+    let vis = p[3] > 0 && p[0] > -1.05 && p[0] < 1.05 && p[1] > -1.05 && p[1] < 1.05 && S.rise > 0.9;
+    const sx = (p[0] * 0.5 + 0.5) * cw, sy = (1 - (p[1] * 0.5 + 0.5)) * ch;
+    const dist = Math.hypot(eye[0] - l.x, eye[1] - y, eye[2] - l.z);
+    if (vis && l.el.classList.contains("bld") && dist > S.R * 2.6) vis = false;
+    if (vis) {
+      const isC = !l.el.classList.contains("bld");
+      const bx = { x0: sx - l.w / 2, x1: sx + l.w / 2, y0: isC ? sy - l.h / 2 : sy - l.h, y1: isC ? sy + l.h / 2 : sy };
+      if (placed.some(q => bx.x0 < q.x1 && bx.x1 > q.x0 && bx.y0 < q.y1 && bx.y1 > q.y0)) vis = false;
+      else placed.push(bx);
+    }
+    l.el.style.opacity = vis ? "" : "0";
+    if (vis) l.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, ${l.el.classList.contains("bld") ? "-100%" : "-50%"})`;
+  }
+}
+requestAnimationFrame(tick);
+
+/* ---------------- Loading flow ---------------- */
+async function load(r, { refresh = false } = {}) {
+  S.R = r;
+  const key = `v1:${CENTER.lat},${CENTER.lon}:${r}`;
+  try {
+    let data = null;
+    if (!refresh) {
+      loader.show("正在读取本地缓存", "之前下载过的地图数据会保存在浏览器里");
+      const txt = await cache.get(key);
+      if (txt) { try { data = JSON.parse(txt); } catch (e) { data = null; } }
+    }
+    if (!data) {
+      data = await fetchOverpass(r);
+      cache.set(key, JSON.stringify(data));
+    }
+    await buildScene(data);
+  } catch (e) {
+    console.error(e);
+    const details = e.details ? e.details.join("\n") : (e.message || String(e));
+    loader.show("没能获取地图数据",
+      "可能是网络无法访问 Overpass 服务，或当前环境限制了外部请求（例如在 claude.ai 预览内打开）。可以重试，或者把查询语句粘贴到 overpass-turbo.eu 运行、导出原始 JSON 后在这里导入。",
+      { actions: true, err: details });
+  }
+}
+
+function importFile(f) {
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = async () => {
+    try {
+      const data = JSON.parse(rd.result);
+      if (!data.elements) throw new Error("文件里没有 elements 字段，请导出 Overpass 的原始 JSON（raw data）");
+      // infer radius from data extent
+      await buildScene(data);
+    } catch (e) {
+      loader.show("导入失败", "请选择 Overpass API 返回的 JSON 文件。", { actions: true, err: e.message || String(e) });
+    }
+  };
+  rd.readAsText(f);
+}
+$("#bImport").onclick = $("#lImport").onclick = () => $("#file").click();
+$("#file").onchange = e => { importFile(e.target.files[0]); e.target.value = ""; };
+$("#lRetry").onclick = () => load(S.R, { refresh: true });
+$("#bReload").onclick = () => load(S.R, { refresh: true });
+$("#selR").onchange = e => { const r = +e.target.value; try { localStorage.setItem("szbay.radius", r); } catch (x) {} load(r); };
+$("#lCopy").onclick = async () => {
+  const q = buildQuery(S.R);
+  try { await navigator.clipboard.writeText(q); $("#lCopy").textContent = "已复制"; }
+  catch (e) { $("#lErr").hidden = false; $("#lErr").textContent = q; }
+};
+
+load(RADIUS);
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+build/
+__pycache__/
+*.pyc
+frames/
+*.mp4
+.DS_Store
