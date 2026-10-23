@@ -112,7 +112,7 @@ export function initUI() {
   };
   // the preset that fits Shenzhen's local time
   const szHour = (new Date().getUTCHours() + 8 + new Date().getUTCMinutes() / 60) % 24;
-  choosePreset(presetForHour(szHour), false);
+  choosePreset(window.SZ_TEST ? "day" : presetForHour(szHour), false);   // (tools: a fixed start)
 }
 
 // once the scene is built: stats line, coordinates, the fly-to menu
