@@ -1,6 +1,7 @@
 """Frame-by-frame demo recorder for 深圳湾空中之岛.
-usage: python3 tools/record.py OUTDIR [--test|--bench] [--page index.html]
-env: VW, VH, FPS (default 1280x720@30). Encode afterwards, e.g.
+usage: python3 tools/record.py OUTDIR [--test|--bench] [--page index.html | --page http://127.0.0.1:8765/web/index.html]
+(the three.js page in web/ uses ES modules and fetch: serve the project root and pass its URL)
+env: VW, VH, FPS (default 1280x720@30); CHROME = Chrome executable (default: Playwright's bundled Chromium). Encode afterwards, e.g.
   ffmpeg -framerate 24 -i OUTDIR/f_%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 18 demo.mp4
 """
 import base64
@@ -12,7 +13,8 @@ import time
 from playwright.sync_api import sync_playwright
 
 OUT = sys.argv[1]
-PAGE = os.path.abspath(sys.argv[sys.argv.index("--page") + 1] if "--page" in sys.argv else "index.html")
+PAGE = sys.argv[sys.argv.index("--page") + 1] if "--page" in sys.argv else "index.html"
+PAGE = PAGE if PAGE.startswith("http") else "file://" + os.path.abspath(PAGE)
 TEST = "--test" in sys.argv
 BENCH = "--bench" in sys.argv
 W, H, FPS = int(os.environ.get("VW", 1280)), int(os.environ.get("VH", 720)), int(os.environ.get("FPS", 30))
@@ -94,14 +96,14 @@ SETUP = r"""
 """
 
 with sync_playwright() as p:
-    b = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
+    b = p.chromium.launch(executable_path=os.environ.get("CHROME") or None, args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
     pg = b.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
     pg.set_default_timeout(600000)
     errs = []
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.route("**/fonts.googleapis.com/**", lambda r: r.abort())
     pg.add_init_script(INIT)
-    pg.goto("file://" + PAGE)
+    pg.goto(PAGE)
     pg.wait_for_function("document.querySelector('#loader').hidden", polling=500)
     secs = pg.evaluate(SETUP)
     cdp = pg.context.new_cdp_session(pg)

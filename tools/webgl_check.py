@@ -1,7 +1,8 @@
 """WebGL smoke test + A/B frame-time benchmark for the page (headless Chrome via Playwright).
 
 usage: .venv/bin/python tools/webgl_check.py [URL ...] [--size 1280x720] [--frames 60] [--shots DIR] [--dynres] [--fallbacks]
-  URL defaults to http://127.0.0.1:8765/index.html (serve the project root over HTTP; file:// is not used)
+  URL defaults to http://127.0.0.1:8765/index.html (serve the project root over HTTP; file:// is not used);
+  the three.js page is http://127.0.0.1:8765/web/index.html (detected by its `renderer` global)
 For each URL: boots with a fake clock (like tools/record.py), checks console errors, render-target mode, shadow size,
 non-black output for day/night views, picking, canvas resizes; then times N frames per view
 (each frame: tick + 1-pixel readPixels to wait for the GPU). With --dynres it also runs the real
@@ -69,6 +70,10 @@ TIME = """(n) => { const px = new Uint8Array(4), ts = [];
   for (let i = 0; i < n; i++) { const t0 = Date.now(); window.__step(16.7); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); ts.push(Date.now() - t0); }
   return ts; }"""
 
+# the three.js page (web/) has no RT / M / frame globals: its render target lives in `post`, picking goes through `camera`
+INFO_NEW = """() => ({ rt: post.mode, w: canvas.width, h: canvas.height, sm: SM.size, smOn: SM.on !== false, smRedraws: SM.redraws || 0,
+  glErr: gl.getError(), maxSamples: gl.getParameter(gl.MAX_SAMPLES),
+  renderer: (() => { const e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); })() })"""
 INFO = """() => ({
   rt: typeof RT !== 'undefined' ? (RT.mode || ((typeof floatRT !== 'undefined' && floatRT ? 'RGBA16F' : 'RGBA8') + ' MSAA×' + RT.samples)) : '?',
   w: canvas.width, h: canvas.height, sm: SM.size, smOn: SM.on !== false,
@@ -97,7 +102,8 @@ def run(url, br):
     pg.wait_for_function("() => typeof S !== 'undefined' && S.ready", timeout=240000, polling=500)
     rep["boot_s"] = round(time.time() - t0, 1)
     pg.evaluate("() => { for (let i = 0; i < 10; i++) window.__step(16.7); }")
-    rep["info"] = pg.evaluate(INFO)
+    NEW = pg.evaluate("() => typeof renderer !== 'undefined'")
+    rep["info"] = pg.evaluate(INFO_NEW if NEW else INFO)
     tag = "new" if "baseline" not in url else "baseline"
     for name, (v, tod) in VIEWS.items():
         pg.evaluate(SETVIEW, [v, tod])
@@ -111,7 +117,8 @@ def run(url, br):
         rep["views"][name] = {"median_ms": statistics.median(ts), "mean_ms": round(statistics.mean(ts), 2), "p90_ms": sorted(ts)[int(len(ts) * 0.9)], "luma": round(luma, 1)}
     # picking: click the tallest landmark's screen position (should open the info card)
     pg.evaluate(SETVIEW, ["VIEWS['v-city']()", 15.5])
-    xy = pg.evaluate("""() => { const b = S.osm.buildings[S.tallest], c = b.L ? b.L.c : [b.x, b.z]; const p = M.xf(frame.vp, c[0], b.h * 0.5, c[1]);
+    xy = pg.evaluate("""() => { const b = S.osm.buildings[S.tallest], c = b.L ? b.L.c : [b.x, b.z];
+      const p = typeof renderer !== 'undefined' ? (v => [v.x, v.y])(camera.position.clone().set(c[0], b.h * 0.5, c[1]).project(camera)) : M.xf(frame.vp, c[0], b.h * 0.5, c[1]);
       const r = canvas.getBoundingClientRect(); return [r.left + (p[0] * 0.5 + 0.5) * r.width, r.top + (1 - (p[1] * 0.5 + 0.5)) * r.height, b.name]; }""")
     pg.evaluate("([x, y]) => pick(x, y)", xy[:2])
     rep["checks"]["pick"] = pg.evaluate("() => ({ sel: S.sel, card: !$('#card').hidden, name: $('#cName').textContent })")
@@ -122,7 +129,7 @@ def run(url, br):
         pg.set_viewport_size({"width": vw, "height": vh})
         pg.evaluate("() => new Promise(r => setTimeout(r, 120))")
         pg.evaluate("() => { for (let i = 0; i < 3; i++) window.__step(16.7); }")
-        info = pg.evaluate("() => ({ w: canvas.width, h: canvas.height, rtw: RT.w, rth: RT.h, err: gl.getError() })")
+        info = pg.evaluate("() => { const r = typeof renderer !== 'undefined' ? post : RT; return { w: canvas.width, h: canvas.height, rtw: r.w, rth: r.h, err: gl.getError() }; }")
         luma = mean_luma(pg.screenshot())
         sizes.append({"viewport": [vw, vh], **info, "luma": round(luma, 1)})
     rep["checks"]["resize"] = sizes
@@ -142,11 +149,15 @@ def run(url, br):
               window.requestAnimationFrame = cb => raf(t => { %s const e = performance.now() + ms; while (performance.now() < e) {} cb(t); }); })();""" % js)
             pg.goto(url)
             pg.wait_for_function("() => typeof S !== 'undefined' && S.ready", timeout=240000, polling=500)
-            pg.evaluate("""() => { window.__realloc = []; const orig = setupRT; window.setupRT = (w, h) => { if (RT.w !== w || RT.h !== h) window.__realloc.push([Math.round(performance.now()), w, h]); return orig(w, h); }; }""")
+            pg.evaluate("""() => { window.__realloc = [];
+              if (typeof renderer !== 'undefined') { const orig = post.setSize.bind(post); post.setSize = (w, h) => { if (post.w !== w || post.h !== h) window.__realloc.push([Math.round(performance.now()), w, h]); return orig(w, h); }; return; }
+              const orig = setupRT; window.setupRT = (w, h) => { if (RT.w !== w || RT.h !== h) window.__realloc.push([Math.round(performance.now()), w, h]); return orig(w, h); }; }""")
             pg.evaluate("() => new Promise(r => setTimeout(r, 40000))")
             rep["checks"]["dynres_40s_" + lname] = pg.evaluate("() => ({ reallocations: window.__realloc.length, sizes: window.__realloc.map(a => a[1] + 'x' + a[2]), scale: PERF.scale })")
             pg.close()
-    if FALLBACKS:
+    if FALLBACKS and NEW:
+        rep["checks"]["fallbacks"] = "n/a: three.js chooses the render-target format and MSAA itself"
+    elif FALLBACKS:
         for label, deny in (("no_f16_msaa", "fmt === 0x881A"), ("no_msaa", "true")):
             pg = br.new_page(viewport={"width": W, "height": H})
             errs = []

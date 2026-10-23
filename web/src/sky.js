@@ -38,7 +38,7 @@ export function makeSky() {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
   const m = new THREE.Mesh(g, makeSkyMaterial());
-  m.frustumCulled = false; m.renderOrder = -10;
+  m.frustumCulled = false; m.renderOrder = 6;   // after all opaque geometry: depth-tested at the far plane, shaded only where nothing else is
   return m;
 }
 export const SEA_Y = -1900;
@@ -47,7 +47,7 @@ export function makeSea() {
   g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-G, -G, G, -G, G, G, -G, -G, G, G, -G, G]), 2));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, SEA_Y, 0), G * Math.SQRT2);   // xz-only positions: three.js cannot compute it
   const m = new THREE.Mesh(g, makeSeaMaterial(SEA_Y));
-  m.frustumCulled = false; m.renderOrder = -5;
+  m.frustumCulled = false; m.renderOrder = 5;    // after the island and city: early depth rejection skips the hidden cloud sea
   return m;
 }
 

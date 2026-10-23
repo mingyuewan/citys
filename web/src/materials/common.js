@@ -42,14 +42,18 @@ float cloudShade(vec2 xz){
   return 1.0 - 0.38 * smoothstep(0.55, 0.78, n) * (1.0 - uNight);
 }
 uniform sampler2DShadow uShadow; uniform float uShadowOn; uniform vec2 uShadowTexel;
+// moving casters (traffic, aircraft) in a second map with the same projection, redrawn every frame (main.js)
+uniform sampler2DShadow uShadowDyn; uniform float uShadowDynOn;
 float shadowAt(vec4 lp){
   if (uShadowOn < 0.5) return 1.0;
   vec3 c = lp.xyz / lp.w * 0.5 + 0.5;
   if (c.x < 0.001 || c.x > 0.999 || c.y < 0.001 || c.y > 0.999 || c.z > 0.999) return 1.0;
   // 4 taps on top of the hardware 2×2 compare filter (LINEAR) ≈ the old 3×3 footprint at less than half the fetches
   float z = c.z - 0.00025; vec2 o = uShadowTexel * 0.6;
-  return 0.25 * (texture(uShadow, vec3(c.xy + vec2(-o.x, -o.y), z)) + texture(uShadow, vec3(c.xy + vec2(o.x, -o.y), z))
+  float s = 0.25 * (texture(uShadow, vec3(c.xy + vec2(-o.x, -o.y), z)) + texture(uShadow, vec3(c.xy + vec2(o.x, -o.y), z))
                + texture(uShadow, vec3(c.xy + vec2(-o.x, o.y), z)) + texture(uShadow, vec3(c.xy + vec2(o.x, o.y), z)));
+  if (uShadowDynOn > 0.5) s = min(s, texture(uShadowDyn, vec3(c.xy, z)));
+  return s;
 }
 vec3 hsv(float h, float s, float v){ vec3 k = clamp(abs(mod(h * 6.0 + vec3(0, 4, 2), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1), k, s); }
 `;
@@ -62,7 +66,7 @@ export const U = {
   uSunDir: { value: new THREE.Vector3() }, uLightDir: { value: new THREE.Vector3() }, uLightCol: { value: new THREE.Vector3() },
   uNight: { value: 0 }, uGold: { value: 0 }, uCam: { value: new THREE.Vector3() }, uFogDen: { value: 1e-4 }, uTime: { value: 0 },
   uWind: { value: new THREE.Vector2() }, uIsle: { value: new THREE.Vector3() }, uSkyAmb: { value: new THREE.Vector3() },
-  uShadow: { value: null }, uShadowOn: { value: 0 }, uShadowTexel: { value: new THREE.Vector2(1, 1) }, uNOff: { value: 0 },
+  uShadow: { value: null }, uShadowOn: { value: 0 }, uShadowDyn: { value: null }, uShadowDynOn: { value: 0 }, uShadowTexel: { value: new THREE.Vector2(1, 1) }, uNOff: { value: 0 },
   uRise: { value: 0 }, uMaxR: { value: 1 },
   uRock: { value: white }, uFacade: { value: white }, uTexOn: { value: new THREE.Vector2() },
 };

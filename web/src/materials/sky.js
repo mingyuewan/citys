@@ -47,5 +47,5 @@ void main(){
   o = vec4(col, 1.0);
 }`;
 
-export const makeSkyMaterial = () => rawMat(fsTriVS, skyFS, { uInvVP: { value: new THREE.Matrix4() }, uMoonDir: { value: new THREE.Vector3() } }, { depthTest: false, depthWrite: false });
+export const makeSkyMaterial = () => rawMat(fsTriVS, skyFS, { uInvVP: { value: new THREE.Matrix4() }, uMoonDir: { value: new THREE.Vector3() } }, { depthWrite: false });
 export const makeSeaMaterial = y => rawMat(seaVS, seaFS, { uY: { value: y } });

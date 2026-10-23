@@ -38,7 +38,7 @@ const CTX = { lost: false };
 canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); CTX.lost = true; loader.show("显卡上下文已丢失", "正在等待浏览器恢复 WebGL…"); });
 canvas.addEventListener("webglcontextrestored", () => { loader.show("正在恢复", "重新载入场景"); location.reload(); });
 
-const scene = new THREE.Scene(), shadowScene = new THREE.Scene();
+const scene = new THREE.Scene(), shadowScene = new THREE.Scene(), dynShadowScene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(0.78 * 180 / Math.PI, 1, 1, 90000);
 const post = new Post(renderer);
 const meshMat = makeMeshMaterial();
@@ -63,15 +63,37 @@ const texReady = Promise.all([loadTex("assets/island-rock.webp", true), loadTex(
 const LOW_END = matchMedia("(pointer: coarse)").matches || Math.min(screen.width, screen.height) < 700;
 const SM = { size: Math.min(LOW_END ? 2048 : 3072, renderer.capabilities.maxTextureSize), on: true, texel: 0, rt: null, cam: new THREE.OrthographicCamera() };
 {
-  const dt = new THREE.DepthTexture(SM.size, SM.size);
-  dt.minFilter = dt.magFilter = THREE.LinearFilter; dt.compareFunction = THREE.LessEqualCompare;
-  SM.rt = new THREE.WebGLRenderTarget(SM.size, SM.size, { depthTexture: dt, format: THREE.RedFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  const depthRT = size => {
+    const dt = new THREE.DepthTexture(size, size);
+    dt.minFilter = dt.magFilter = THREE.LinearFilter; dt.compareFunction = THREE.LessEqualCompare;
+    return new THREE.WebGLRenderTarget(size, size, { depthTexture: dt, format: THREE.RedFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  };
+  // static casters: redrawn only when sun, focus, extent or what is shown changes (SM.key); moving casters every frame
+  SM.depthRT = depthRT;
+  SM.rt = depthRT(SM.size); SM.dynSize = Math.min(1536, SM.size); SM.dyn = depthRT(SM.dynSize); SM.key = "";
 }
+function setShadowSize(size) { SM.rt.dispose(); SM.size = size; SM.rt = SM.depthRT(size); SM.key = ""; }
 const shadowMat = makeShadowMaterial();
 shadowScene.userData.shadowMat = shadowMat;
 
 /* ---------------- resolution ---------------- */
-const PERF = { scale: (window.SZ_TEST && window.SZ_TEST.scale) || 1 };
+// dynamic resolution: a few fixed levels with hysteresis and a minimum dwell time, so render targets are only
+// reallocated when the load really changes (from the old engine; tests pin it through window.SZ_TEST)
+const PERF_LEVELS = [1, 0.85, 0.72, 0.6];
+const PERF = { level: 0, scale: (window.SZ_TEST && window.SZ_TEST.scale) || 1, ema: 0.016, lastAdj: 0, slow: 0, fast: 0 };
+function adaptPerf(now, dt) {
+  PERF.ema += (dt - PERF.ema) * 0.05;
+  if (window.SZ_TEST || !S.ready || document.hidden) return;
+  if (PERF.ema > 0.036) { PERF.slow += dt; PERF.fast = 0; } else if (PERF.ema < 0.019) { PERF.fast += dt; PERF.slow = 0; } else { PERF.slow = PERF.fast = 0; }
+  const since = now - PERF.lastAdj;
+  let lv = PERF.level;
+  if (PERF.slow > 2 && since > 4000 && lv < PERF_LEVELS.length - 1) lv++;
+  else if (PERF.fast > 6 && since > 10000 && lv > 0) lv--;
+  if (lv === PERF.level) return;
+  PERF.level = lv; PERF.scale = PERF_LEVELS[lv]; PERF.lastAdj = now; PERF.slow = PERF.fast = 0;
+  // at the lowest level also drop the shadow map to 2048 (one-off reallocation)
+  if (lv === PERF_LEVELS.length - 1 && SM.size > 2048) setShadowSize(2048);
+}
 const VIEW = { cw: Math.max(1, canvas.clientWidth), ch: Math.max(1, canvas.clientHeight) };
 new ResizeObserver(es => { const r = es[es.length - 1].contentRect; VIEW.cw = Math.max(1, r.width); VIEW.ch = Math.max(1, r.height); }).observe(canvas);
 function resize() {
@@ -108,10 +130,10 @@ async function buildScene() {
   for (const I of ISLETS) { itx.push(...I.tx); ity.push(...I.ty); }
   itx.push(...ROOFTREES); ity.push(...ROOFTREE_Y);
   M.props = makeProps(D, { x: itx, y: ity }, meshMat, scene, shadowScene);
-  makeTraffic(osm, bridges, isle.waterAt, scene, shadowScene);
+  makeTraffic(osm, bridges, isle.waterAt, scene, dynShadowScene);
   scene.add(makeFalls());
   M.clouds = makeClouds(TEX.cloud); scene.add(M.clouds.mesh);
-  makeAir(osm, D, isle.waterAt, scene, shadowScene);
+  makeAir(osm, D, isle.waterAt, scene, dynShadowScene);
   M.city.geometry.computeBoundingSphere();
   scene.add(M.ground, M.city, M.island);
   for (const m of [M.city, M.island]) { const s = new THREE.Mesh(m.geometry, shadowMat); s.frustumCulled = false; shadowScene.add(s); }
@@ -149,6 +171,7 @@ function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (CTX.lost) return;
+  adaptPerf(now, dt);
   resize();
   // clock
   if (Math.abs(S.todTarget - S.tod) > 0.001) { S.tod += (S.todTarget - S.tod) * Math.min(1, dt * 2.2); if (Math.abs(S.todTarget - S.tod) < 0.01) S.tod = S.todTarget; }
@@ -173,7 +196,8 @@ function tick(now) {
 
   // shadow map fitted around the focus, snapped to texels
   const focus = S.tour || S.follow ? [eye[0] + (tgt[0] - eye[0]) * 0.4, 0, eye[2] + (tgt[2] - eye[2]) * 0.4] : [tgt[0], 0, tgt[2]];
-  const hs = clamp((S.tour || S.follow ? Math.max(500, Math.abs(eye[1]) * 2.2) : dist * 0.75), 350, 4300);
+  const hs0 = clamp((S.tour || S.follow ? Math.max(500, Math.abs(eye[1]) * 2.2) : dist * 0.75), 350, 4300);
+  const hs = 350 * Math.pow(1.04, Math.round(Math.log(hs0 / 350) / Math.log(1.04)));   // 4 % steps: zooming redraws the static map only per step
   const texelW = 2 * hs / SM.size; SM.texel = texelW;
   const fx = Math.round(focus[0] / texelW) * texelW, fz = Math.round(focus[2] / texelW) * texelW;
   const ld = L.lightDir, lc = SM.cam;
@@ -190,6 +214,7 @@ function tick(now) {
   U.uIsle.value.set(ISLE.R0, ISLE.thH, ISLE.lobe); v3(U.uSkyAmb, skyAmbient(L));
   U.uTime.value = now / 1000; U.uWind.value.set(S.wind[0], S.wind[1]);
   U.uShadow.value = SM.rt.depthTexture; U.uShadowOn.value = L.dayF > 0.15 && SM.on ? 1 : 0;
+  U.uShadowDyn.value = SM.dyn.depthTexture; U.uShadowDynOn.value = U.uShadowOn.value;
   U.uShadowTexel.value.set(1 / SM.size, 1 / SM.size); U.uNOff.value = SM.texel * 1.5;
   U.uRise.value = S.rise; U.uMaxR.value = S.R * 1.42;
   U.uRock.value = TEX.rock || U.uRock.value; U.uFacade.value = TEX.facade || U.uFacade.value;
@@ -207,8 +232,9 @@ function tick(now) {
 
   if (L.dayF > 0.15 && SM.on) {
     if (S.rise > 0.9) lc.layers.enable(LATE_SHADOW); else lc.layers.disable(LATE_SHADOW);
-    renderer.setRenderTarget(SM.rt); renderer.clear(false, true, false);
-    renderer.render(shadowScene, lc);
+    const key = [ld[0].toFixed(5), ld[1].toFixed(5), ld[2].toFixed(5), fx, fz, hs, S.rise < 1 ? now : 1, S.showGen].join();
+    if (key !== SM.key) { SM.key = key; SM.redraws = (SM.redraws || 0) + 1; renderer.setRenderTarget(SM.rt); renderer.clear(false, true, false); renderer.render(shadowScene, lc); }
+    renderer.setRenderTarget(SM.dyn); renderer.clear(false, true, false); renderer.render(dynShadowScene, lc);
   }
   post.render(scene, camera, L);
   placeLabels(U.uVP.value.elements, eye, VIEW.cw, VIEW.ch);
@@ -220,7 +246,7 @@ requestAnimationFrame(tick);
 initUI();
 bindInput(canvas, { onClick: pick, onKey });
 // test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
-Object.assign(window, { S, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
+Object.assign(window, { $, S, PERF, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
   canvas, gl, renderer, camera, post, SM, CTX });
-window.__dbg = { scene, shadowScene, M, meshMat, post, SM, U, THREE };   // debugging / profiling only
+window.__dbg = { scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
 buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });
