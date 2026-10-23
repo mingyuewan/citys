@@ -32,7 +32,7 @@ function toggleMode() { const n = sky(S.todTarget).night > 0.5; setTod(n ? 15.5 
 function toggleOrbit() { S.orbit = !S.orbit; $("#bOrbit").setAttribute("aria-pressed", String(S.orbit)); if (S.orbit) { stopTour(); if (S.follow) stopUserMotion(); } }
 function toggleTour() { if (S.tour) stopTour(); else startTour(); }
 function toggleClouds() { S.showClouds = !S.showClouds; $("#bCloud").setAttribute("aria-pressed", String(S.showClouds)); }
-function toggleGen() { S.showGen = !S.showGen; $("#bGen").setAttribute("aria-pressed", String(S.showGen)); if (!S.showGen && S.sel >= (S.osm ? S.osm.landmarkCount : 0)) closeCard(); }
+function toggleGen() { S.showGen = !S.showGen; $("#bGen").setAttribute("aria-pressed", String(S.showGen)); if (!S.showGen && S.sel >= (S.osm ? S.osm.landmarkCount + S.osm.osmCount : 0)) closeCard(); }
 function goHome() { flyTo(HOME(), reduceMotion ? 0 : 2200); }
 export function flyToBuilding(i) {
   const b = S.osm.buildings[i]; const c = b.landmark ? b.L.c : centroid(b.ring);
@@ -56,6 +56,13 @@ export function showCard(i) {
     $("#cName").textContent = b.name;
     rows.push(["高度", `${b.h} m`]); rows.push(["英文名", esc(b.en)]);
     rows.push(["数据", '<span class="est">坐标、高度来自维基百科；外形为按实物简化的示意</span>']);
+  } else if (b.osm) {
+    $("#cName").textContent = b.name || "建筑";
+    const src = { h: "OSM 高度标签（实测）", l: "按 OSM 层数推算（每层 3.2 m）", e: "按建筑类型和占地估算" }[b.src] || "";
+    rows.push(["高度", `${Math.round(b.h)} m <span class="est">${src}</span>`]);
+    if (b.kind && b.kind !== "yes") rows.push(["类型", esc(b.kind)]);
+    rows.push(["占地", `${fmt(Math.round(b.area))} m²`]);
+    rows.push(["数据", '<span class="est">轮廓来自 OpenStreetMap（ODbL）</span>']);
   } else {
     $("#cName").textContent = "生成楼体";
     rows.push(["高度", `${Math.round(b.h)} m <span class="est">（按片区随机）</span>`]);
@@ -97,7 +104,7 @@ export function initUI() {
 // once the scene is built: stats line, coordinates, the fly-to menu
 export function fillUI(osm, D, counts) {
   const c = counts;
-  $("#stats").innerHTML = `<b>${fmt(osm.roads.length)}</b> 条 OSM 道路 · <b>${fmt(osm.landmarkCount)}</b> 座真实地标 · <b>${fmt(osm.buildings.length - osm.landmarkCount)}</b> 栋生成楼体（${c.construct} 处在建） · <b>${fmt(c.trees)}</b> 棵树 · <b>${fmt(c.shrubs)}</b> 丛绿化带灌木 · <b>${c.falls}</b> 道瀑布 · <b>${c.islets}</b> 座小浮岛 · <b>${fmt(c.lamps)}</b> 盏路灯 · <b>${fmt(c.signals)}</b> 组红绿灯 · <b>${c.bus}</b> 个公交站 · <b>${c.features}</b> 处球场、泳池和停车场`;
+  $("#stats").innerHTML = `<b>${fmt(osm.roads.length)}</b> 条 OSM 道路 · <b>${fmt(osm.landmarkCount)}</b> 座真实地标 · <b>${fmt(osm.osmCount)}</b> 栋 OSM 真实建筑 · <b>${fmt(osm.buildings.length - osm.landmarkCount - osm.osmCount)}</b> 栋补位生成楼体（${c.construct} 处在建） · <b>${fmt(c.trees)}</b> 棵树 · <b>${fmt(c.shrubs)}</b> 丛绿化带灌木 · <b>${c.falls}</b> 道瀑布 · <b>${c.islets}</b> 座小浮岛 · <b>${fmt(c.lamps)}</b> 盏路灯 · <b>${fmt(c.signals)}</b> 组红绿灯 · <b>${c.bus}</b> 个公交站 · <b>${c.features}</b> 处球场、泳池和停车场`;
   $("#coords").textContent = `${D.center[0].toFixed(4)}°N ${D.center[1].toFixed(4)}°E · 范围 ${(S.R * 2 / 1000).toFixed(1)}×${(S.R * 2 / 1000).toFixed(1)} km`;
   const sel = $("#selLm");
   const og1 = document.createElement("optgroup"); og1.label = "地标"; sel.appendChild(og1);

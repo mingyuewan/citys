@@ -34,7 +34,7 @@ VIEWS = {
     "overview": ("HOME()", 15.5),
     "city": ("VIEWS['v-city']()", 15.5),
     "cbd": ("({ tx: -60, tz: -260, ty: 60, yaw: 0.9, pitch: 0.32, dist: 1100 })", 16.4),
-    "street": ("({ tx: -326.9, tz: -671.7, ty: 0, yaw: 0.6, pitch: 0.55, dist: 130 })", 12.6),
+    "street": ("({ tx: -326.9, tz: -671.7, ty: 0, yaw: 2.2, pitch: 0.5, dist: 140 })", 12.6),
     "falls": ("VIEWS['v-falls']()", 15.5),
     "dusk": ("VIEWS['v-city']()", 17.3),
     "night": ("VIEWS['v-city']()", 21.0),

@@ -263,12 +263,41 @@ export function genLandmark(g, L, bid, all) {
   }
 }
 
+// ---- real buildings (OpenStreetMap footprints, merged by tools/osm/merge_osm.py): extruded from their outline,
+// dressed by building kind and height in the same materials as the generated ones
+const KIND_RES = /^(apartments|residential|dormitory|hotel)$/, KIND_LOW = /^(house|detached|terrace|semidetached_house|bungalow|hut|shed|kiosk|cabin)$/;
+const KIND_WORKS = /^(industrial|warehouse|garage|garages|service|construction|parking|carport|storage_tank|greenhouse)$/;
+const KIND_CIVIC = /^(retail|commercial|supermarket|train_station|transportation|public|civic|government|school|university|college|hospital|kindergarten|sports_centre|stadium|church|temple)$/;
+export function genOsmBuilding(g, b, bid) {
+  const rnd = rng(b.id * 2654435761 + bid), r = b.ring, k = b.kind, area = b.area;
+  const y0 = b.minh || 0, h = Math.max(b.h, y0 + 2.5);
+  // the outline's longest edge orients the roof plant
+  let ang = 0, best = 0;
+  for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length], l = Math.hypot(q[0] - p[0], q[1] - p[1]); if (l > best) { best = l; ang = Math.atan2(q[1] - p[1], q[0] - p[0]); } }
+  const [cx, cz] = centroid(r), s = Math.sqrt(area);
+  if (k === "roof") { prism(g, r, Math.max(y0, h - 1.2), h, [0.86, 0.85, 0.82], 3, bid); return; }   // canopies
+  let mat, col, green = false;
+  if (KIND_RES.test(k) || (k === "yes" && h >= 24 && h < 130 && area < 1600 && rnd() < 0.6)) { mat = 1; col = RESI[Math.floor(rnd() * RESI.length)]; }
+  else if (KIND_LOW.test(k) || (h < 18 && area < 450)) { mat = 4; col = VILL[Math.floor(rnd() * VILL.length)]; }
+  else if (KIND_WORKS.test(k)) { mat = 3; col = CONC.map(v => v * (0.95 + rnd() * 0.15)); }
+  else if (KIND_CIVIC.test(k) && h < 45) { mat = 2; col = GLASS[Math.floor(rnd() * GLASS.length)].map(v => v * 1.1); green = rnd() < 0.35; }
+  else { mat = 0; col = GLASS[Math.floor(rnd() * GLASS.length)]; }
+  prism(g, r, y0, h, col, mat, bid, green ? { capCol: [0.32, 0.45, 0.26], capMat: 11 } : { capCol: CONC.map(v => v * 0.95) });
+  if (y0 > 0) return;   // a building:part floating on another part: no roof plant
+  if (h > 18 && s > 14) roofUnits(g, cx, cz, s * 0.55, s * 0.55, ang, h, bid, rnd, 1 + (rnd() * 3 | 0));
+  if (mat === 1 && h > 60 && rnd() < 0.5) prism(g, scaleRing(r, 1.01, cx, cz), h, h + 1.2, col.map(v => v * 0.9), 3, bid, { cap: false, both: true });
+  if (h > 140) beacons.push([cx, h + 3, cz, rnd() * 6]);
+  if (h > 50) roofSpots.push([cx, h + 3, cz]);
+}
+
+// landmarks, real buildings, generated buildings — in that order, so a draw range can leave the generated ones out
 export function buildCity(osm, D) {
   const g = new Geo();
-  let lmEnd = 0;
+  let realEnd = 0;
+  const nReal = osm.landmarkCount + (osm.osmCount || 0);
   osm.buildings.forEach((b, bid) => {
-    if (b.landmark) genLandmark(g, b.L, bid, D.landmarks); else genBuilding(g, b, bid);
-    if (bid === osm.landmarkCount - 1) lmEnd = g.i.length;
+    if (b.landmark) genLandmark(g, b.L, bid, D.landmarks); else if (b.osm) genOsmBuilding(g, b, bid); else genBuilding(g, b, bid);
+    if (bid === nReal - 1) realEnd = g.i.length;
   });
-  return { V: new Float32Array(g.v), I: new Uint32Array(g.i), lmEnd };
+  return { V: new Float32Array(g.v), I: new Uint32Array(g.i), lmEnd: realEnd };
 }

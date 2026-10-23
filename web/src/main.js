@@ -4,7 +4,7 @@
 import * as THREE from "three";
 import { S, reduceMotion } from "./state.js";
 import { ISLE, inIsle, clamp, meshGeometry, orient } from "./world.js";
-import { loadData, loadImg, decodeData } from "./data.js";
+import { loadData, loadImg, decodeData, loadOsmBuildings } from "./data.js";
 import { buildCity, CONSTRUCT } from "./buildings.js";
 import { buildIsland, makeFalls, FALLS, ISLETS } from "./island.js";
 import { buildBridges, makeRoads, updateRoads, LAMPS, SIGLIGHTS, BUSLIGHTS } from "./roads.js";
@@ -107,13 +107,14 @@ function resize() {
 /* ---------------- build scene ---------------- */
 async function buildScene() {
   const models = loadModel("assets/island.glb");   // modelled rock body (tools/blender/model_island.py); fetched while the data loads
+  const realBuildings = loadOsmBuildings();   // real footprints (tools/osm/merge_osm.py), fetched alongside
   const D = await loadData();
   window.D = D; S.R = D.R; initCamera(D);
   await texReady;
   loader.show("正在搭建深圳湾", `${fmt(D.roads.length)} 条道路 · ${fmt(D.buildings.length + D.landmarks.length)} 栋楼`);
   await sleep(30);
   const [maskImg, luImg] = await Promise.all([loadImg(D.mask), loadImg(D.lu)]);
-  const osm = decodeData(D); S.osm = osm;
+  const osm = decodeData(D, await realBuildings); S.osm = osm;
   const bridges = buildBridges(osm);   // marks bridge roads as ribbons: the ground and road mesh skip them
   const city = buildCity(osm, D); orient(city.V, city.I);
   S.lmIdx = city.lmEnd; S.tris = city.I.length / 3;
