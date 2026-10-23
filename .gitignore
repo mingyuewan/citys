@@ -5,3 +5,6 @@ frames/
 *.mp4
 .DS_Store
 *.blend[0-9]*
+
+# OSM raw downloads (large; re-fetch with tools/osm/fetch_osm.py)
+data/osm/raw.json
