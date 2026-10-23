@@ -11,6 +11,7 @@ import { buildBridges, makeRoads, updateRoads, LAMPS, SIGLIGHTS, BUSLIGHTS } fro
 import { makeProps, updateProps } from "./props.js";
 import { makeTraffic, updateTraffic, TRAFFIC } from "./traffic.js";
 import { makeAir, updateAir, finishAir, AIR } from "./air.js";
+import { FLY, startFlight, stopFlight, stepFlight, drawFlight, bindFlightInput, buildHeightField } from "./flight.js";
 import { ROOFTREES, ROOFTREE_Y } from "./buildings.js";
 import { LATE_SHADOW } from "./instancing.js";
 import { makeGround } from "./ground.js";
@@ -21,7 +22,8 @@ import { Post, LOOK } from "./post.js";
 import { MOOD, stepPreset, PRESETS } from "./presets.js";
 import { loadModel, toPageGeometry, concatGeometry } from "./models.js";
 import { HOME, VIEWS, flyTo, initCamera, stepCamera, bindInput, startTour, stopTour } from "./camera.js";
-import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus, choosePreset } from "./ui.js";
+import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus, choosePreset, showIntro } from "./ui.js";
+import { startSound, updateSound } from "./audio.js";
 
 const canvas = $("#gl");
 let renderer;
@@ -156,11 +158,13 @@ async function buildScene() {
   fillUI(osm, D, { construct: CONSTRUCT.length, falls: FALLS.groups.length, islets: ISLETS.length, trees: nTrees, shrubs: P.trees[0].count,
     lamps: LAMPS.length, signals: SIGLIGHTS.length, bus: BUSLIGHTS.length, features: P.features.n });
   buildLabels(osm, D);
+  buildHeightField(osm);
   S.sel = -1; $("#card").hidden = true;
   S.rise = reduceMotion ? 1 : 0; S.riseStart = performance.now(); S.ready = true;
   S.cam = { tx: 0, tz: 0, ty: -400, yaw: -0.3, pitch: 0.75, dist: 21000 };
   flyTo(HOME(), reduceMotion ? 0 : 7000);
   loader.hide();
+  showIntro(osm);
 }
 
 /* ---------------- picking: ray against the city mesh, building index from the bid attribute ---------------- */
@@ -192,7 +196,9 @@ function tick(now) {
   if (S.ready && S.rise < 1) S.rise = Math.min(1, (now - S.riseStart) / 4200);
 
   // camera
-  const [eye, tgt] = stepCamera(now, reduceMotion && S.tour ? 0 : dt);
+  const flown = S.ready ? stepFlight(dt, now) : null;
+  const [eye, tgt] = flown || stepCamera(now, reduceMotion && S.tour ? 0 : dt);
+  if (flown) { S.eyeNow = eye; S.tgtNow = tgt; }
   const W = canvas.width, H = canvas.height;
   const dist = Math.hypot(eye[0] - tgt[0], eye[1] - tgt[1], eye[2] - tgt[2]);
   camera.near = clamp(Math.min(dist, Math.abs(eye[1]) + 60) * 0.02, 0.8, 60); camera.far = 90000; camera.aspect = W / H;
@@ -240,7 +246,7 @@ function tick(now) {
   updateRoads(eye); updateProps(eye);
   updateTraffic(reduceMotion ? 0 : dt, now / 1000, L.night > 0.5, eye);
   const pm = TRAFFIC.lights.material.uniforms; pm.uPx.value = H / (2 * Math.tan(0.39)); pm.uAdd.value = 1;
-  updateAir(now / 1000, reduceMotion ? 0 : dt, L, eye); finishAir(H / (2 * Math.tan(0.39)));
+  updateAir(now / 1000, reduceMotion ? 0 : dt, L, eye); drawFlight(now); finishAir(H / (2 * Math.tan(0.39)));
   M.clouds.mesh.visible = S.showClouds; if (S.showClouds) updateClouds(M.clouds, S.wind, eye, L.night, camera, MOOD.clouds);
 
   if (L.dayF > 0.15 && SM.on) {
@@ -249,8 +255,9 @@ function tick(now) {
     if (key !== SM.key) { SM.key = key; SM.redraws = (SM.redraws || 0) + 1; renderer.setRenderTarget(SM.rt); renderer.clear(false, true, false); renderer.render(shadowScene, lc); }
     renderer.setRenderTarget(SM.dyn); renderer.clear(false, true, false); renderer.render(dynShadowScene, lc);
   }
-  post.render(scene, camera, L, Math.max(dist, 1));
+  post.render(scene, camera, L, S.flight ? 1400 : Math.max(dist, 1), S.flight ? 0.35 : 1);   // flying: a far focus, a gentle tilt-shift
   placeLabels(U.uVP.value.elements, eye, VIEW.cw, VIEW.ch);
+  updateSound(eye, FLY, L);
   skyStatus(now);
 }
 requestAnimationFrame(tick);
@@ -258,8 +265,11 @@ requestAnimationFrame(tick);
 /* ---------------- boot ---------------- */
 initUI();
 bindInput(canvas, { onClick: pick, onKey });
+bindFlightInput(canvas);
+// sound needs a user gesture: the first click or key starts it
+for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, () => startSound(), { once: true });
 // test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
-Object.assign(window, { $, S, PERF, setTod, choosePreset, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
+Object.assign(window, { $, S, PERF, setTod, choosePreset, FLY, startFlight, stopFlight, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
   canvas, gl, renderer, camera, post, SM, CTX });
 window.__dbg = { toPageGeometry, LOOK, scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
 buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });

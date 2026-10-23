@@ -154,6 +154,39 @@ html[data-mode="day"] .lbl.sea { color: #0f5b61; }
 .lbl.air { font: 500 11px/1.2 var(--f-mono); opacity: .8; transform: translate(-50%, -150%); }
 body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
 
+#flyhud { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; text-align: center; width: min(560px, calc(100vw - 32px)); }
+#flyhud .row { display: flex; gap: 18px; justify-content: center; font: 500 15px/1.2 var(--f-mono); font-variant-numeric: tabular-nums; }
+#flyhud .f { color: var(--accent); }
+#flyhud .msg { color: var(--danger); font-weight: 600; margin-top: 2px; }
+#flyhud .msg:empty { display: none; }
+#flyhud .help { font-size: 12px; color: var(--ink-dim); margin: 2px 0 0; display: inline; }
+#flyhud #bFlyExit { display: inline-flex; margin-left: 8px; padding: 6px 10px; border: 1px solid var(--panel-line); }
+#flyhud .help b { color: var(--ink); font-weight: 500; }
+body.flying #rail, body.flying #card, body.flying #plate, body.flying .lbl { opacity: 0 !important; pointer-events: none; }
+body.flying #gl { cursor: crosshair; }
+#splash { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s;
+  background: radial-gradient(ellipse at center, rgba(235,245,250,0.0) 30%, rgba(235,245,250,0.75) 100%), repeating-linear-gradient(100deg, rgba(255,255,255,0.18) 0 2px, transparent 2px 9px); }
+body.splash #splash { opacity: 1; }
+#intro { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: linear-gradient(180deg, rgba(10,14,24,0.0), rgba(10,14,24,0.28)); }
+#intro .box { width: min(560px, 100%); padding: 24px 26px 20px; }
+#intro .eyebrow { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-dim); text-transform: uppercase; }
+#intro h1 { margin: 6px 0 8px; font: 900 clamp(30px, 6vw, 44px)/1.1 var(--f-display); letter-spacing: .04em; }
+#intro h1 span { color: var(--accent); }
+#intro .lead { margin: 0 0 16px; line-height: 1.65; color: var(--ink-dim); }
+#intro .lead b { color: var(--ink); font-weight: 600; font-family: var(--f-mono); }
+#intro .moods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#intro .mood { appearance: none; text-align: left; padding: 10px 10px 9px; border-radius: 9px; border: 1px solid var(--panel-line); background: transparent; color: var(--ink); cursor: pointer; font: inherit; }
+#intro .mood b { display: block; font: 600 16px/1.2 var(--f-display); margin-bottom: 4px; }
+#intro .mood span { font-size: 11.5px; color: var(--ink-dim); line-height: 1.4; }
+#intro .mood[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+#intro .mood:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#intro .go { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+#intro .go .btn { padding: 12px 18px; font-size: 15px; border: 1px solid var(--panel-line); }
+#intro .go .primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+#intro .fine { margin: 14px 0 0; font-size: 12px; color: var(--ink-dim); }
+body.intro #plate, body.intro #rail, body.intro .lbl { opacity: 0 !important; pointer-events: none; }
+@media (max-width: 560px) { #intro .moods { grid-template-columns: repeat(2, 1fr); } }
+body.recording #bRec { background: var(--danger); color: #fff; }
 #hint { font-size: 11.5px; color: var(--ink-dim); margin-top: 4px; line-height: 1.5; }
 #hint b { color: var(--ink); font-weight: 500; }
 
@@ -195,6 +228,7 @@ body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
   </span>
   <output class="clock" id="todOut">14:36</output>
   <span class="sep" aria-hidden="true"></span>
+  <button class="btn" id="bFly" type="button" aria-pressed="false" title="驾驶飞行器 (P)">飞行 <span class="k">P</span></button>
   <button class="btn" id="bTour" type="button" aria-pressed="false" title="空中漫游 (F)">空中漫游 <span class="k">F</span></button>
   <button class="btn" id="bOrbit" type="button" aria-pressed="false" title="自动环绕 (R)">环绕 <span class="k">R</span></button>
   <button class="btn" id="bHome" type="button" title="回到总览 (H)">总览 <span class="k">H</span></button>
@@ -203,8 +237,38 @@ body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
   </select>
   <span class="sep" aria-hidden="true"></span>
   <button class="btn" id="bCloud" type="button" aria-pressed="true" title="云层 (C)">云层 <span class="k">C</span></button>
-  <button class="btn" id="bGen" type="button" aria-pressed="true" title="显示/隐藏生成的楼体 (G)">生成楼体 <span class="k">G</span></button>
+  <button class="btn" id="bGen" type="button" aria-pressed="true" title="显示/隐藏补位生成的楼体 (G)">生成楼体 <span class="k">G</span></button>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="btn" id="bSound" type="button" aria-pressed="true" title="声音 (M)">声音 <span class="k">M</span></button>
+  <button class="btn" id="bRec" type="button" aria-pressed="false" title="录屏，停止后自动保存 (V)">录屏 <span class="k">V</span></button>
 </nav>
+
+<div id="intro" hidden>
+  <div class="box panel" role="dialog" aria-labelledby="iTitle">
+    <div class="eyebrow">Floating Island · 南山后海 · 沙盘</div>
+    <h1 id="iTitle">深圳湾<span>·</span>空中之岛</h1>
+    <p class="lead">一座浮在云海上的深圳湾沙盘：真实的道路、<b id="iBld">2,778</b> 栋 OpenStreetMap 建筑和 11 座地标，岩层、瀑布、云和城市的灯都在浏览器里实时绘制。</p>
+    <div class="moods" role="group" aria-label="选择时段">
+      <button class="mood" type="button" data-intro="mist"><b>晨雾</b><span>云海最厚，岛半隐半现</span></button>
+      <button class="mood" type="button" data-intro="day"><b>白昼</b><span>晴空下的沙盘</span></button>
+      <button class="mood" type="button" data-intro="dusk"><b>黄昏</b><span>金色侧光，华灯初上</span></button>
+      <button class="mood" type="button" data-intro="night"><b>夜</b><span>灯光秀与孔明灯</span></button>
+    </div>
+    <div class="go">
+      <button class="btn primary" id="goView" type="button">进入沙盘</button>
+      <button class="btn" id="goFly" type="button">驾驶飞行器</button>
+    </div>
+    <p class="fine">拖动平移 · 右键旋转 · 滚轮缩放 · 点击楼体查看来源 · 声音由代码实时合成</p>
+  </div>
+</div>
+
+<div id="flyhud" class="panel" hidden>
+  <div class="row"><span class="v">0 km/h</span><span class="h">0 m</span><span class="f"></span></div>
+  <div class="msg" aria-live="polite"></div>
+  <div class="help">拖动或方向键操纵 · <b>W</b>/<b>S</b> 油门 · <b>空格</b> 加速 · 穿过瀑布试试 · <b>Esc</b> 返回</div>
+  <button class="btn" id="bFlyExit" type="button">返回沙盘</button>
+</div>
+<div id="splash" aria-hidden="true"></div>
 
 <aside id="card" class="panel" hidden aria-live="polite">
   <button class="btn x" id="bClose" type="button" aria-label="关闭">✕</button>

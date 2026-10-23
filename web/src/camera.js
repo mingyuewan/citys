@@ -164,15 +164,15 @@ export function bindInput(canvas, { onClick, onKey }) {
     clampCam();
   });
   const endPointer = e => {
-    if (drag && !drag.moved && pointers.size === 1 && e.type === "pointerup") onClick(e.clientX, e.clientY);
+    if (drag && !drag.moved && pointers.size === 1 && e.type === "pointerup" && !S.flight) onClick(e.clientX, e.clientY);
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = null;
     if (!pointers.size) { drag = null; canvas.classList.remove("dragging"); }
   };
   canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
-  canvas.addEventListener("wheel", e => { e.preventDefault(); userTook(); S.cam.dist *= Math.exp(e.deltaY * 0.0012); clampCam(); }, { passive: false });
+  canvas.addEventListener("wheel", e => { e.preventDefault(); if (S.flight) return; userTook(); S.cam.dist *= Math.exp(e.deltaY * 0.0012); clampCam(); }, { passive: false });
   addEventListener("keydown", e => {
-    if (e.target.closest && e.target.closest("select,input")) return;
+    if (S.flight || (e.target.closest && e.target.closest("select,input"))) return;   // (flight.js has the keys)
     const k = e.key.toLowerCase(), c = S.cam, step = c.dist * 0.04;
     if (["w", "arrowup", "s", "arrowdown", "a", "arrowleft", "d", "arrowright", "q", "e"].includes(k)) {
       userTook();

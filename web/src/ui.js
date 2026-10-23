@@ -7,6 +7,9 @@ import { sky, fmtTod } from "./sky.js";
 import { HOME, VIEWS, flyTo, startTour, stopTour, stopUserMotion } from "./camera.js";
 import { AIR } from "./air.js";
 import { PRESETS, ORDER, setPreset, presetForHour } from "./presets.js";
+import { FLY, startFlight, stopFlight } from "./flight.js";
+import { SOUND, startSound, setSoundOn } from "./audio.js";
+import { toggleRecording, recordingSupported } from "./recorder.js";
 import { FALLS } from "./island.js";
 
 export const $ = s => document.querySelector(s);
@@ -34,6 +37,9 @@ function toggleOrbit() { S.orbit = !S.orbit; $("#bOrbit").setAttribute("aria-pre
 function toggleTour() { if (S.tour) stopTour(); else startTour(); }
 function toggleClouds() { S.showClouds = !S.showClouds; $("#bCloud").setAttribute("aria-pressed", String(S.showClouds)); }
 function toggleGen() { S.showGen = !S.showGen; $("#bGen").setAttribute("aria-pressed", String(S.showGen)); if (!S.showGen && S.sel >= (S.osm ? S.osm.landmarkCount + S.osm.osmCount : 0)) closeCard(); }
+function toggleSound() { startSound(); setSoundOn(!SOUND.on); $("#bSound").setAttribute("aria-pressed", String(SOUND.on)); }
+function toggleRec() { startSound(); toggleRecording($("#gl")); }
+export function toggleFlight() { if (FLY.on) stopFlight(); else { closeCard(); startFlight(); } }
 function goHome() { flyTo(HOME(), reduceMotion ? 0 : 2200); }
 export function flyToBuilding(i) {
   const b = S.osm.buildings[i]; const c = b.landmark ? b.L.c : centroid(b.ring);
@@ -76,6 +82,9 @@ export function showCard(i) {
 export function onKey(k) {
   const pk = ORDER.find(id => PRESETS[id].key === k);
   if (pk) choosePreset(pk);
+  else if (k === "p") toggleFlight();
+  else if (k === "m") toggleSound();
+  else if (k === "v") toggleRec();
   else if (k === "n") toggleMode(); else if (k === "r") toggleOrbit(); else if (k === "t") flyTallest(); else if (k === "h") goHome();
   else if (k === "g") toggleGen(); else if (k === "f") toggleTour(); else if (k === "c") toggleClouds();
   else if (k === "escape") closeCard();
@@ -83,6 +92,9 @@ export function onKey(k) {
 
 export function initUI() {
   for (const b of document.querySelectorAll("[data-preset]")) b.onclick = () => choosePreset(b.dataset.preset);
+  $("#bSound").onclick = toggleSound; $("#bRec").onclick = toggleRec;
+  if (!recordingSupported()) $("#bRec").hidden = true;
+  $("#bFly").onclick = toggleFlight; $("#bFlyExit").onclick = stopFlight;
   $("#bOrbit").onclick = toggleOrbit; $("#bHome").onclick = goHome; $("#bTour").onclick = toggleTour;
   $("#bGen").onclick = toggleGen; $("#bCloud").onclick = toggleClouds; $("#bClose").onclick = closeCard;
   $("#bPlate").onclick = () => setPlate($("#plate").classList.contains("collapsed"));
@@ -171,4 +183,18 @@ export function skyStatus(now) {
   const items = [`热气球 ${(AIR.balloons || []).length}`, `飞艇 1`, `瀑布 ${FALLS.groups.length} 道`, `船 ${(AIR.boats || []).length} 艘`, `塔吊 ${(AIR.cranes || []).length} 台`, `✈ 航班 ${AIR.planes.length}`, `🚁 直升机 ${AIR.helis.length}`, `白鹭 ${AIR.flocks.reduce((a, f) => a + f.n, 0)} 只`, `配送无人机 ${AIR.quads.length}`];
   if (AIR.show.active) items.push(`<b>灯光秀进行中 · ${AIR.show.N} 架 · 孔明灯升空</b>`); else items.push("灯光秀与孔明灯 19:00 后开始");
   $("#sky").innerHTML = "空中：" + items.join(" · ");
+}
+
+/* ---------------- start screen: pick a time of day, then the sand table or the seaplane ---------------- */
+export function showIntro(osm) {
+  const q = new URLSearchParams(location.search).get("go");
+  if (window.SZ_TEST || q) { if (q === "fly") startFlight(); return; }   // tools and links skip it
+  $("#iBld").textContent = fmt(osm.osmCount || 0);
+  document.body.classList.add("intro"); $("#intro").hidden = false;
+  const mark = () => { for (const b of document.querySelectorAll("[data-intro]")) b.setAttribute("aria-pressed", String(b.dataset.intro === S.preset)); };
+  for (const b of document.querySelectorAll("[data-intro]")) b.onclick = () => { startSound(); choosePreset(b.dataset.intro); mark(); };
+  mark();
+  const close = fly => { startSound(); $("#intro").hidden = true; document.body.classList.remove("intro"); if (fly) startFlight(); };
+  $("#goView").onclick = () => close(false); $("#goFly").onclick = () => close(true);
+  setTimeout(() => $("#goView").focus(), 50);
 }

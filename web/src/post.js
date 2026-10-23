@@ -36,7 +36,8 @@ export class Post {
   pass(mat, target) { this.quad.material = mat; this.r.setRenderTarget(target); this.r.render(this.qs, this.qc); }
   // draw `scene` into the HDR target, then bloom + composite onto the canvas
   // focus: distance from the eye to what it looks at (the orbit target)
-  render(scene, camera, L, focus) {
+  // tilt: scale of the tilt-shift strength (flight mode keeps a little)
+  render(scene, camera, L, focus, tilt = 1) {
     const r = this.r, B = this.bloom, m = this.m;
     r.setRenderTarget(this.scene); r.setClearColor(0x000000, 1); r.clear(true, true, false);
     r.render(scene, camera);
@@ -53,7 +54,7 @@ export class Post {
     u.uTexD1.value = [1 / this.dof[1].width, 1 / this.dof[1].height]; u.uTexD2.value = [1 / this.dof[2].width, 1 / this.dof[2].height];
     u.uNear.value = camera.near; u.uFar.value = camera.far; u.uFocus.value = focus;
     u.uTexel.value = [1 / this.w, 1 / this.h]; u.uCav.value = LOOK.cavity.map((v, i) => i < 2 ? v * (1 - 0.85 * (LOOK.mist || 0)) : v);
-    u.uTilt.value = LOOK.tilt; u.uWarm.value = LOOK.warm; u.uLift.value = LOOK.lift; u.uSat.value = LOOK.sat; u.uVig.value = LOOK.vig;
+    u.uTilt.value = [LOOK.tilt[0] * tilt, LOOK.tilt[1] * (tilt < 1 ? 3 : 1), LOOK.tilt[2] * (tilt < 1 ? 2 : 1), LOOK.tilt[3] + (tilt < 1 ? 0.12 : 0)]; u.uWarm.value = LOOK.warm; u.uLift.value = LOOK.lift; u.uSat.value = LOOK.sat; u.uVig.value = LOOK.vig;
     u.uScene.value = this.scene.texture; u.uBloom.value = B.length ? B[0].texture : this.scene.texture;
     u.uBloomK.value = B.length ? lerp(0.35, 0.9, L.night) : 0; u.uExpo.value = lerp(0.92, 1.15, L.night); u.uNight.value = L.night;
     this.pass(m.comp, null);

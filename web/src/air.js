@@ -24,7 +24,7 @@ function tplGeometry(t) {
   return meshGeometry(new Float32Array(g.v), new Uint32Array(g.i));
 }
 // place the next model of template t: page rotation order (roll about x, pitch about z, then yaw about −y)
-function emit(t, pos, yaw, pitch, roll, scale = 1) {
+export function emit(t, pos, yaw, pitch, roll, scale = 1) {
   let list = G.pool.get(t); if (!list) G.pool.set(t, list = []);
   const k = G.used.get(t) || 0; G.used.set(t, k + 1);
   if (k === list.length) {

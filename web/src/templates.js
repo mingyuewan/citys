@@ -43,6 +43,15 @@ export const TPL = {};
   tplFin(jet, -20, 1.6, 7, 5, 1.8, 4, [0.70, 0.12, 0.10], 8);
   tplCylX(jet, -1, 4, 1.1, 1.1, 8, GREY, 5, -1.8, 6.5); tplCylX(jet, -1, 4, 1.1, 1.1, 8, GREY, 5, -1.8, -6.5);
   TPL.jet = jet;
+  // the player's seaplane in flight mode (flight.js): white fuselage, orange wings, floats; the propeller apart
+  const flyer = tplNew(), ORANGE = [0.95, 0.52, 0.18];
+  tplCylX(flyer, -3.2, 2.6, 0.62, 0.62, 10, WHITE, 8); tplCylX(flyer, 2.6, 3.6, 0.62, 0.25, 10, WHITE, 8); tplCylX(flyer, -6.6, -3.2, 0.18, 0.62, 8, WHITE, 8);
+  tplWing(flyer, 0.4, 0.55, 11.5, 1.7, 1.0, 0.25, 0.14, ORANGE, 8, 0.25); tplWing(flyer, -6.1, 0.2, 3.6, 0.9, 0.5, 0.25, 0.08, ORANGE, 8);
+  tplFin(flyer, -6.0, 0.3, 1.6, 1.1, 0.5, 0.6, ORANGE, 8);
+  tplBox(flyer, 0.6, 0.95, 0, 1.6, 0.5, 0.9, [0.25, 0.42, 0.55], 8);            // canopy
+  for (const sg of [1, -1]) { tplBox(flyer, 0.2, -1.35, sg * 1.25, 4.4, 0.36, 0.42, WHITE, 8); tplBox(flyer, 0.6, -0.75, sg * 1.0, 0.12, 0.9, 0.12, DARK, 8); }
+  TPL.flyer = flyer;
+  const prop = tplNew(); tplBox(prop, 0, 0, 0, 0.08, 2.6, 0.22, DARK, 8); tplBox(prop, 0, 0, 0, 0.08, 0.22, 2.6, DARK, 8); TPL.prop = prop;
   const heli = tplNew();
   tplCylX(heli, -2.4, 2.6, 1.5, 1.2, 8, [0.20, 0.30, 0.55], 8); tplCylX(heli, 2.6, 3.8, 1.2, 0.4, 8, [0.20, 0.30, 0.55], 8);
   tplCylX(heli, -9.5, -2.4, 0.3, 0.7, 6, [0.20, 0.30, 0.55], 8); tplFin(heli, -9.2, 0.0, 2.2, 1.4, 0.8, 0.6, [0.20, 0.30, 0.55], 8);
