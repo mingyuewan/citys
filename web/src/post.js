@@ -5,7 +5,7 @@ import { lerp } from "./world.js";
 import { makeBright, makeDown, makeUp, makeComp } from "./materials/post.js";
 
 // style A look: tilt-shift strength and range, grade (see compFS); tuned against build/style/concept-*.png
-export const LOOK = { tilt: [1.0, 0.18, 1.1, 0.26], warm: [1.03, 1.0, 0.96], lift: [0.035, 0.025, 0.06], sat: 1.16, vig: 0.28 };
+export const LOOK = { tilt: [1.0, 0.18, 1.1, 0.26], warm: [1.03, 1.0, 0.96], lift: [0.035, 0.025, 0.06], sat: 1.16, vig: 0.28, cavity: [0.35, 0.22, 1.5] };
 export class Post {
   constructor(renderer) {
     this.r = renderer;
@@ -52,6 +52,7 @@ export class Post {
     u.uDepth.value = this.scene.depthTexture; u.uD0.value = this.dof[0].texture; u.uD1.value = this.dof[1].texture; u.uD2.value = this.dof[2].texture;
     u.uTexD1.value = [1 / this.dof[1].width, 1 / this.dof[1].height]; u.uTexD2.value = [1 / this.dof[2].width, 1 / this.dof[2].height];
     u.uNear.value = camera.near; u.uFar.value = camera.far; u.uFocus.value = focus;
+    u.uTexel.value = [1 / this.w, 1 / this.h]; u.uCav.value = LOOK.cavity;
     u.uTilt.value = LOOK.tilt; u.uWarm.value = LOOK.warm; u.uLift.value = LOOK.lift; u.uSat.value = LOOK.sat; u.uVig.value = LOOK.vig;
     u.uScene.value = this.scene.texture; u.uBloom.value = B.length ? B[0].texture : this.scene.texture;
     u.uBloomK.value = B.length ? lerp(0.35, 0.9, L.night) : 0; u.uExpo.value = lerp(0.92, 1.15, L.night); u.uNight.value = L.night;

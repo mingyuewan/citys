@@ -85,6 +85,9 @@ void main(){
   wc += uLightCol * pow(max(dot(R, L), 0.0), 300.0) * 6.0 * sh * (1.0 - uNight);
   float shore = 1.0 - blurW;
   wc += vec3(1.0, 0.55, 0.22) * shore * shore * 0.35 * uNight * (0.7 + 0.6 * abs(nx) * wfade);
+  // style A: at night the bay keeps a deep teal and carries the city's warm light, streaked by the ripples
+  float cityGlow = 1.0 - smoothstep(0.2, 0.95, textureLod(uTex, clamp(uv, 0.0, 1.0), 7.0).r);
+  wc += (vec3(0.012, 0.05, 0.07) + vec3(1.0, 0.62, 0.30) * (0.05 + 0.32 * cityGlow) * (0.75 + 0.5 * abs(nz) * wfade)) * uNight;
   wc = mix(wc, wc * 1.08 + 0.02, smoothstep(0.98, 0.6, w) * (1.0 - uNight));
   float sh2 = textureLod(uTex, clamp(uv, 0.0, 1.0), 2.0).r;
   float fd = 1.0 - sh2;

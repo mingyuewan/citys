@@ -27,7 +27,9 @@ uniform sampler2D uDepth; uniform sampler2D uD0; uniform sampler2D uD1; uniform 
 uniform float uNear; uniform float uFar; uniform float uFocus;
 uniform vec4 uTilt;      // x: strength, y–z: |log(depth / focus)| from sharp to fully blurred, w: screen band (|y − 0.5| where blur starts)
 uniform vec3 uWarm; uniform vec3 uLift; uniform float uSat; uniform float uVig;
+uniform vec2 uTexel; uniform vec3 uCav;   // cavity: x ridge highlight, y valley shade, z sample radius (px)
 vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+float linZ(vec2 uv){ float z = texture(uDepth, uv).r * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
 vec3 tent(sampler2D t, vec2 uv, vec2 e){
   vec3 c = texture(t, uv + e * vec2(-1, -1)).rgb + texture(t, uv + e * vec2(1, -1)).rgb + texture(t, uv + e * vec2(-1, 1)).rgb + texture(t, uv + e * vec2(1, 1)).rgb;
   c += 2.0 * (texture(t, uv + e * vec2(-1, 0)).rgb + texture(t, uv + e * vec2(1, 0)).rgb + texture(t, uv + e * vec2(0, -1)).rgb + texture(t, uv + e * vec2(0, 1)).rgb);
@@ -41,6 +43,15 @@ void main(){
   coc = clamp(max(coc, 0.8 * smoothstep(uTilt.w, 0.5, abs(vUv.y - 0.5))) * uTilt.x, 0.0, 1.0);
   vec3 s0 = texture(uScene, vUv).rgb, s1 = texture(uD0, vUv).rgb;
   vec3 c = coc < 0.34 ? mix(s0, s1, coc / 0.34) : coc < 0.67 ? mix(s1, tent(uD1, vUv, uTexD1), (coc - 0.34) / 0.33) : mix(tent(uD1, vUv, uTexD1), tent(uD2, vUv, uTexD2), (coc - 0.67) / 0.33);
+  // style A cavity: convex edges (nearer than their surroundings) catch a thin warm highlight, creases and building
+  // feet (farther than their surroundings) darken a little — the bevelled, hand-made look of a model
+  if (uCav.x + uCav.y > 0.0 && vz < uFar * 0.5) {
+    vec2 e = uTexel * uCav.z;
+    float nb = (linZ(vUv + vec2(e.x, 0.0)) + linZ(vUv - vec2(e.x, 0.0)) + linZ(vUv + vec2(0.0, e.y)) + linZ(vUv - vec2(0.0, e.y))) * 0.25;
+    float rel = (nb - vz) / vz, sharp = 1.0 - coc;
+    float ridge = smoothstep(0.003, 0.04, rel) * (1.0 - smoothstep(0.5, 3.0, rel)), valley = smoothstep(0.0015, 0.02, -rel);
+    c = c * (1.0 - uCav.y * valley * sharp) + vec3(1.0, 0.86, 0.66) * uCav.x * ridge * sharp * (1.0 - uNight * 0.8) * (0.4 + 0.6 * dot(c, vec3(0.33)));
+  }
   c += texture(uBloom, vUv).rgb * uBloomK;
   c = aces(c * uExpo);
   // diorama grade: warm white balance, richer colour, shadows lifted toward lavender, soft vignette
@@ -59,4 +70,4 @@ export const makeUp = () => fs(upFS, { uTex: { value: null }, uTexel: { value: [
 export const makeComp = () => fs(compFS, { uScene: { value: null }, uBloom: { value: null }, uBloomK: { value: 0 }, uExpo: { value: 1 }, uNight: { value: 0 },
   uDepth: { value: null }, uD0: { value: null }, uD1: { value: null }, uD2: { value: null }, uTexD1: { value: [1, 1] }, uTexD2: { value: [1, 1] },
   uNear: { value: 1 }, uFar: { value: 1e5 }, uFocus: { value: 1000 }, uTilt: { value: [1, 0.12, 0.95, 0.3] },
-  uWarm: { value: [1, 1, 1] }, uLift: { value: [0, 0, 0] }, uSat: { value: 1.12 }, uVig: { value: 0.35 } });
+  uWarm: { value: [1, 1, 1] }, uLift: { value: [0, 0, 0] }, uSat: { value: 1.12 }, uVig: { value: 0.35 }, uTexel: { value: [1, 1] }, uCav: { value: [0, 0, 1.5] } });
