@@ -31,11 +31,11 @@ float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a 
 void main(){
   vec2 p = vPos.xz * 0.00017 + uWind * 0.00005;
   float f = fbm(p), f2 = fbm(p + uSunDir.xz * 0.006);
-  float cov = smoothstep(0.36, 0.60, f);
+  float cov = smoothstep(0.26, 0.50, f);   // style A: a fuller sea of clouds
   float shade = clamp(0.62 + (f - f2) * 7.0, 0.3, 1.25);
   vec3 sunC = mix(vec3(1.0, 0.98, 0.95), vec3(1.0, 0.66, 0.46), uGold);
-  vec3 dayTop = mix(vec3(0.66, 0.70, 0.78), sunC, 0.55) * shade * (0.5 + 0.6 * clamp(uSunDir.y * 2.0 + 0.2, 0.0, 1.0));
-  vec3 dayGap = mix(vec3(0.34, 0.46, 0.62), vec3(0.40, 0.36, 0.48), uGold);
+  vec3 dayTop = mix(vec3(0.80, 0.78, 0.88), sunC * vec3(1.0, 0.96, 0.88), 0.6) * shade * (0.5 + 0.6 * clamp(uSunDir.y * 2.0 + 0.2, 0.0, 1.0));
+  vec3 dayGap = mix(vec3(0.42, 0.62, 0.86), vec3(0.48, 0.42, 0.58), uGold);
   vec2 sh = vPos.xz + uSunDir.xz * (-vPos.y / max(uSunDir.y, 0.12));
   float inS = 1.0 - smoothstep(-350.0, 350.0, length(sh) - isleR(atan(sh.y, sh.x)) * 0.78);
   vec3 day = mix(dayGap, dayTop, cov) * mix(1.0, 0.55, inS);

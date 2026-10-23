@@ -3,8 +3,8 @@
 import { Geo, hash1, rng, lerp, centroid, prism, frustum, boxAt, scaleRing, rectRing, chamferRing, superRing, circleRing, crossRing, lRing, gableRoof, shell } from "./world.js";
 
 // ---- palettes
-export const GLASS = [[0.36, 0.48, 0.56], [0.30, 0.42, 0.44], [0.52, 0.55, 0.58], [0.28, 0.33, 0.42], [0.46, 0.42, 0.36], [0.40, 0.50, 0.52]];
-export const RESI = [[0.88, 0.86, 0.82], [0.92, 0.90, 0.86], [0.82, 0.80, 0.76], [0.90, 0.84, 0.76], [0.80, 0.82, 0.84], [0.86, 0.80, 0.74]];
+export const GLASS = [[0.60, 0.74, 0.74], [0.54, 0.70, 0.66], [0.82, 0.80, 0.74], [0.56, 0.66, 0.74], [0.78, 0.66, 0.52], [0.66, 0.76, 0.70]];   // style A: celadon, cream, a terracotta
+export const RESI = [[0.93, 0.89, 0.82], [0.96, 0.93, 0.87], [0.90, 0.85, 0.77], [0.94, 0.85, 0.74], [0.86, 0.88, 0.84], [0.92, 0.82, 0.72]];
 export const VILL = [[0.86, 0.80, 0.72], [0.82, 0.72, 0.66], [0.78, 0.82, 0.84], [0.90, 0.88, 0.82], [0.76, 0.70, 0.62], [0.84, 0.76, 0.70]];
 export const CONC = [0.60, 0.60, 0.58], METAL = [0.66, 0.68, 0.70];
 
@@ -180,7 +180,7 @@ export function genBuilding(g, b, bid) {
 export const LM_TOPS = [];   // for searchlights: [x, y, z]
 export function genLandmark(g, L, bid, all) {
   const [cx, cz] = L.c, h = L.h, rot = L.rot * Math.PI / 180, [w, d] = L.s;
-  const glass = [0.50, 0.62, 0.70];
+  const glass = L.k === "bamboo" ? [0.90, 0.88, 0.82] : [0.62, 0.74, 0.76];   // style A: the Spring Bamboo cream white, the rest celadon
   switch (L.k) {
     case "bamboo": {   // 华润大厦「春笋」: tapering cylinder, closing to a point
       const r0 = w, seg = 56;

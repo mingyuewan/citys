@@ -60,7 +60,7 @@ void main(){
   float d = distance(vPos, uCam);
   float a = t * vA * smoothstep(120.0, 750.0, d) * mix(1.0, 1.0 - 0.55 * uNight, uPuffA);   // textured puffs are denser: thin them at night so city light shows through
   vec3 sunC = mix(vec3(1.0, 0.99, 0.97), vec3(1.0, 0.72, 0.50), uGold);
-  vec3 dayC = mix(vec3(0.60, 0.64, 0.70), sunC, vLit) * (0.85 + 0.25 * vUv.y);
+  vec3 dayC = mix(vec3(0.74, 0.72, 0.84), sunC * vec3(1.0, 0.97, 0.90), vLit) * (0.88 + 0.22 * vUv.y);   // style A: lavender shade, cream light
   vec3 nightC = mix(vec3(0.16, 0.10, 0.07), vec3(0.06, 0.07, 0.10), vLit);
   vec3 c = mix(dayC, nightC, uNight) * shade;
   c = fogIt(c, vPos);

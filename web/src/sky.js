@@ -14,7 +14,7 @@ export function sky(tod) {
   const night = 1 - dayF;
   const gold = dayF * (1 - smooth(0.04, 0.42, sun[1]));
   const moon = norm3([-0.35, 0.62, -0.45]);
-  const sunCol = [1.0 * 1.15, (0.95 - 0.33 * gold) * 1.15, (0.88 - 0.5 * gold) * 1.15].map(v => v * clamp(sun[1] * 4 + 0.15, 0, 1));
+  const sunCol = [1.0 * 1.15, (0.92 - 0.33 * gold) * 1.15, (0.80 - 0.5 * gold) * 1.15]   // style A: a warmer sun.map(v => v * clamp(sun[1] * 4 + 0.15, 0, 1));
   const moonCol = [0.030, 0.038, 0.060];
   const lightDir = dayF > 0.15 ? sun : moon;
   const lightCol = dayF > 0.15 ? sunCol : moonCol;
@@ -25,7 +25,7 @@ export function sky(tod) {
 // skyAmb() of the shaders: skyColor((0, 1, 0)) desaturated, for the light L of sky(tod)
 export function skyAmbient(L) {
   const sa = Math.max(L.sun[1], 0), gold = L.gold, mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
-  let day = mix([0.20, 0.40, 0.76], [0.28, 0.32, 0.58], gold * 0.7);
+  let day = mix([0.22, 0.50, 0.88], [0.34, 0.36, 0.66], gold * 0.7);
   day = day.map((v, i) => v + [1.0, 0.78, 0.52][i] * Math.pow(sa, 10) * (0.22 + 0.7 * gold));
   const night = [0.008, 0.013, 0.04].map((v, i) => v + [0.30, 0.15, 0.07][i] * Math.exp(-12) * 0.42);
   const s = mix(day, night, L.night), l = s[0] * 0.3 + s[1] * 0.5 + s[2] * 0.2;
@@ -79,6 +79,16 @@ export function makeClouds(tex) {
     for (let k = 0; k < n; k++) {
       const dx = (R() - 0.5) * size * 3.2, dz = (R() - 0.5) * size * 2.2, dy = R() * size * 0.5;
       puffs.push({ x: cx + dx, y: cy + dy, z: cz + dz, s: size * (0.7 + R() * 0.7), lit: clamp(0.35 + dy / (size * 0.5) * 0.6 + R() * 0.15, 0, 1), a: 0.55 + R() * 0.35 });
+    }
+  }
+  // style A: a carpet of big, low clouds round and under the island (the sea of clouds seen from above)
+  const RC = rng(29);
+  for (let c = 0; c < 34; c++) {
+    const a = RC() * Math.PI * 2, r = 2600 + RC() * 6500, cx = Math.cos(a) * r, cz = Math.sin(a) * r, cy = -1750 + RC() * 300;
+    const n = 5 + (RC() * 5 | 0), size = 380 + RC() * 260;
+    for (let k = 0; k < n; k++) {
+      const dx = (RC() - 0.5) * size * 3.0, dz = (RC() - 0.5) * size * 2.4, dy = RC() * size * 0.45;
+      puffs.push({ x: cx + dx, y: cy + dy, z: cz + dz, s: size * (0.8 + RC() * 0.6), lit: clamp(0.45 + dy / (size * 0.45) * 0.5 + RC() * 0.1, 0, 1), a: 0.7 + RC() * 0.25 });
     }
   }
   // spray and mist at the foot of every waterfall (anchored, no drift)

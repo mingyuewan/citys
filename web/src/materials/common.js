@@ -17,11 +17,11 @@ float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
 vec3 skyColor(vec3 d){
   d = normalize(d); float h = d.y;
   float sa = max(dot(d, uSunDir), 0.0);
-  vec3 hor = mix(vec3(0.72, 0.81, 0.90), vec3(1.0, 0.62, 0.40), uGold * (0.45 + 0.55 * pow(sa, 2.0)));
-  vec3 zen = mix(vec3(0.20, 0.40, 0.76), vec3(0.28, 0.32, 0.58), uGold * 0.7);
-  vec3 day = mix(hor, zen, pow(clamp(h, 0.0, 1.0), 0.5));
-  day += vec3(1.0, 0.78, 0.52) * pow(sa, 10.0) * (0.22 + 0.7 * uGold);
-  if (h < 0.0) day = mix(hor * 0.9, vec3(0.42, 0.44, 0.43), clamp(-h * 4.0, 0.0, 1.0));
+  vec3 hor = mix(vec3(0.84, 0.90, 0.95), vec3(1.0, 0.64, 0.42), uGold * (0.45 + 0.55 * pow(sa, 2.0)));   // style A: pale airy horizon
+  vec3 zen = mix(vec3(0.22, 0.50, 0.88), vec3(0.34, 0.36, 0.66), uGold * 0.7);   // style A: saturated blue
+  vec3 day = mix(hor, zen, pow(clamp(h, 0.0, 1.0), 0.32));   // style A: the blue comes in close above the horizon
+  day += vec3(1.0, 0.82, 0.58) * pow(sa, 6.0) * (0.30 + 0.7 * uGold);   // warm glow round the sun
+  if (h < 0.0) day = mix(hor * 0.95, vec3(0.78, 0.80, 0.88), clamp(-h * 4.0, 0.0, 1.0));   // style A: the cloud sea's pale lavender, not grey
   vec3 nh = vec3(0.075, 0.062, 0.085), nz = vec3(0.008, 0.013, 0.04);
   vec3 night = mix(nh, nz, pow(clamp(h, 0.0, 1.0), 0.4));
   night += vec3(0.30, 0.15, 0.07) * exp(-abs(h) * 12.0) * 0.42;

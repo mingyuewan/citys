@@ -45,7 +45,7 @@ function rockBody(g, cx, cy, cz, rFun, prof, N, seed, water, jag = 1) {
       const out = [Math.cos(P[3]), -0.25, Math.sin(P[3])];
       if (n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0) n = n.map(v => -v);
       const kind = P[4], dark = 1 - 0.35 * k / K;
-      const col = kind === 0 ? [0.28, 0.42, 0.20] : kind === 1 ? [0.44, 0.33, 0.23] : [0.47 * dark, 0.43 * dark, 0.38 * dark];
+      const col = kind === 0 ? [0.40, 0.56, 0.24] : kind === 1 ? [0.62, 0.42, 0.28] : [0.70 * dark, 0.52 * dark, 0.38 * dark];   // style A: sandstone
       const c2 = P[5] && k < 3 ? [0.22, 0.27, 0.28] : col;
       vi.push(g.vert(P[0], P[1], P[2], n[0], n[1], n[2], c2, P[3] * uS, P[1], -1, kind === 0 ? 11 : 10));
     }
@@ -98,7 +98,7 @@ export function buildIsland(maskImg, D) {
   for (let s = 0; s < 70; s++) {
     const k = 4 + Math.floor(R() * 8), i = Math.floor(R() * N), P = rows[k][i];
     const sc = 0.93, x = P[0] * sc, z = P[2] * sc, y = P[1] + 25, rad = 25 + R() * 90, len = 120 + R() * 480;
-    frustum(g, circleRing(x, z, rad, 9), circleRing(x + (R() - 0.5) * 30, z + (R() - 0.5) * 30, rad * 0.06, 9), y, y - len, [0.40, 0.37, 0.33], 10, -1, { cap: false, smooth: true });
+    frustum(g, circleRing(x, z, rad, 9), circleRing(x + (R() - 0.5) * 30, z + (R() - 0.5) * 30, rad * 0.06, 9), y, y - len, [0.58, 0.44, 0.34], 10, -1, { cap: false, smooth: true });
   }
   // vines over the lip
   for (let i = 0; i < N; i++) {

@@ -17,7 +17,7 @@ import { makeGround } from "./ground.js";
 import { sky, skyAmbient, makeSky, makeSea, makeClouds, updateClouds } from "./sky.js";
 import { U } from "./materials/common.js";
 import { makeMeshMaterial, makeShadowMaterial } from "./materials/building.js";
-import { Post } from "./post.js";
+import { Post, LOOK } from "./post.js";
 import { HOME, VIEWS, flyTo, initCamera, stepCamera, bindInput, startTour, stopTour } from "./camera.js";
 import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus } from "./ui.js";
 
@@ -210,7 +210,7 @@ function tick(now) {
   // uniforms shared by every scene material
   v3(U.uSunDir, L.sun); v3(U.uLightDir, L.lightDir); v3(U.uLightCol, L.lightCol);
   U.uNight.value = L.night; U.uGold.value = L.gold; v3(U.uCam, eye);
-  U.uFogDen.value = 1 / (S.R * (6.5 + 3.5 * (1 - L.night)));
+  U.uFogDen.value = 1 / (S.R * (6.5 + 9.0 * (1 - L.night)));   // style A: clearer air by day
   U.uIsle.value.set(ISLE.R0, ISLE.thH, ISLE.lobe); v3(U.uSkyAmb, skyAmbient(L));
   U.uTime.value = now / 1000; U.uWind.value.set(S.wind[0], S.wind[1]);
   U.uShadow.value = SM.rt.depthTexture; U.uShadowOn.value = L.dayF > 0.15 && SM.on ? 1 : 0;
@@ -236,7 +236,7 @@ function tick(now) {
     if (key !== SM.key) { SM.key = key; SM.redraws = (SM.redraws || 0) + 1; renderer.setRenderTarget(SM.rt); renderer.clear(false, true, false); renderer.render(shadowScene, lc); }
     renderer.setRenderTarget(SM.dyn); renderer.clear(false, true, false); renderer.render(dynShadowScene, lc);
   }
-  post.render(scene, camera, L);
+  post.render(scene, camera, L, Math.max(dist, 1));
   placeLabels(U.uVP.value.elements, eye, VIEW.cw, VIEW.ch);
   skyStatus(now);
 }
@@ -248,5 +248,5 @@ bindInput(canvas, { onClick: pick, onKey });
 // test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
 Object.assign(window, { $, S, PERF, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
   canvas, gl, renderer, camera, post, SM, CTX });
-window.__dbg = { scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
+window.__dbg = { LOOK, scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
 buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });

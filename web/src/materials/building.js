@@ -117,7 +117,7 @@ void main(){
       }
       if (vUv.y > 30.0 && mod(vUv.y, 52.0) < 4.2) {
         float lv = step(0.5, fract(vUv.y / 0.42));
-        alb = vec3(0.46, 0.48, 0.50) * (0.8 + 0.25 * lv); glassAmt = 0.0; emis = vec3(0.0); inF = 0.0;
+        alb = vCol * (0.86 + 0.12 * lv); glassAmt = 0.0; emis = vec3(0.0); inF = 0.0;   // style A: plant floors in the body colour
       }
       if (m == 7) {
         float fin = mix(0.15, 1.0 - lineAA(fract(vUv.x / 2.4), 0.12, fwidth(vUv.x / 2.4)), fade);
@@ -222,9 +222,9 @@ void main(){
       vec3 r1 = texture(uRock, ru / vec2(260.0, 180.0)).rgb / rm, r2 = texture(uRock, ru / vec2(41.0, 29.0)).rgb / rm;
       alb = vCol * (0.86 + 0.14 * band) * r1 * mix(vec3(1.0), r2, 0.5 * (1.0 - smoothstep(600.0, 2600.0, camD)));
     }
-    alb = mix(alb, vec3(0.46, 0.34, 0.24), smoothstep(-90.0, -10.0, vPos.y) * 0.6);
+    alb = mix(alb, vec3(0.66, 0.46, 0.30), smoothstep(-90.0, -10.0, vPos.y) * 0.6);
     float moss = smoothstep(0.35, 0.8, n.y) * smoothstep(0.4, 0.7, nA);
-    alb = mix(alb, vec3(0.24, 0.36, 0.17), moss);
+    alb = mix(alb, vec3(0.40, 0.56, 0.24), moss);
     glassAmt = 0.0;
   } else if (m == 11) {
     alb = vCol * (0.8 + 0.4 * vnoise(vec2(vUv.x * 0.07, vPos.z * 0.07 + vPos.y * 0.2)));
@@ -307,8 +307,9 @@ void main(){
     vec3 refl = skyColor(R);
     float F = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
     float spec = pow(max(dot(R, uLightDir), 0.0), 220.0) * sh;
-    vec3 base0 = mix(vCol * facadeK * 0.20 * (amb + direct), inDay * (amb * 0.55 + direct * 0.08 + 0.02), clamp(inF / max(glassAmt, 0.01), 0.0, 1.0));
-    vec3 gc = base0 + refl * (0.10 + 0.62 * F) * mix(1.0, 0.3, uNight) + uLightCol * spec * 2.0 * (1.0 - uNight * 0.8);
+    // style A: painted-model glass, the body colour shows through
+    vec3 base0 = mix(vCol * facadeK * 0.62 * (amb + direct), inDay * (amb * 0.55 + direct * 0.08 + 0.02), clamp(inF / max(glassAmt, 0.01), 0.0, 1.0));
+    vec3 gc = base0 + refl * (0.05 + 0.34 * F) * mix(1.0, 0.3, uNight) + uLightCol * spec * 2.0 * (1.0 - uNight * 0.8);
     c = mix(c, gc * ao, glassAmt);
   }
   if (m == 9) c = vec3(0.62, 0.61, 0.58) * (amb + direct) + vec3(1.0, 0.62, 0.28) * 0.9 * night;

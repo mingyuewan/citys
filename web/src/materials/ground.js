@@ -31,13 +31,13 @@ void main(){
   float dcam0 = distance(vPos, uCam);
   float near = 1.0 - smoothstep(150.0, 750.0, dcam0);
   float n2 = vnoise(vPos.xz * 0.06), n3 = vnoise(vPos.xz * 0.9), n4 = vnoise(vPos.xz * 3.1);
-  vec3 concrete = mix(vec3(0.50, 0.50, 0.48), vec3(0.56, 0.53, 0.49), n2) * (0.9 + 0.14 * n1);
-  vec3 grass = mix(vec3(0.23, 0.39, 0.16), vec3(0.31, 0.46, 0.20), n2) * (0.85 + 0.25 * n1) * (1.0 + (n4 - 0.5) * 0.3 * near);
+  vec3 concrete = mix(vec3(0.72, 0.67, 0.58), vec3(0.78, 0.71, 0.61), n2) * (0.9 + 0.14 * n1);
+  vec3 grass = mix(vec3(0.44, 0.56, 0.28), vec3(0.54, 0.63, 0.31), n2) * (0.85 + 0.25 * n1) * (1.0 + (n4 - 0.5) * 0.3 * near);
   vec3 landC = concrete;
   if (zone > 0.5 && zone < 2.5) {                       // CBD / tech park plazas
     vec2 j = abs(fract(vPos.xz / 1.5) - 0.5); float jo = smoothstep(0.455, 0.49, max(j.x, j.y));
     float bandP = step(0.5, fract((vPos.x + vPos.z) / 18.0));
-    landC = mix(vec3(0.64, 0.62, 0.58), vec3(0.55, 0.54, 0.52), bandP * 0.55) * (0.94 + 0.08 * n3);
+    landC = mix(vec3(0.88, 0.82, 0.71), vec3(0.80, 0.75, 0.66), bandP * 0.55) * (0.94 + 0.08 * n3);
     landC *= 1.0 - jo * 0.14 * near;
     vec2 cellP = floor(vPos.xz / 14.0); vec2 fP = fract(vPos.xz / 14.0) - 0.5;
     float pm = max(abs(fP.x), abs(fP.y));
@@ -45,26 +45,26 @@ void main(){
     landC = mix(landC, mix(grass * 0.9, vec3(0.72, 0.71, 0.68), step(0.135, pm)), pl);
   } else if ((zone > 2.5 && zone < 3.5) || (zone > 4.5 && zone < 5.5 && n2 > 0.48)) {   // residential compounds
     vec2 j = abs(fract(vPos.xz / 0.6) - 0.5); float jo = smoothstep(0.44, 0.49, max(j.x, j.y));
-    vec3 pave = vec3(0.61, 0.58, 0.54) * (0.93 + 0.1 * n3) * (1.0 - jo * 0.12 * near);
+    vec3 pave = vec3(0.84, 0.78, 0.68) * (0.93 + 0.1 * n3) * (1.0 - jo * 0.12 * near);
     float lawn = smoothstep(6.5, 7.5, bd);
     float hedge = smoothstep(5.4, 5.8, bd) - smoothstep(6.6, 7.1, bd);
     landC = mix(pave, grass, lawn);
-    landC = mix(landC, vec3(0.13, 0.26, 0.10) * (0.8 + 0.4 * n4), hedge * 0.92);
+    landC = mix(landC, vec3(0.26, 0.42, 0.17) * (0.8 + 0.4 * n4), hedge * 0.92);
   } else if (zone > 3.5 && zone < 4.5) {                // urban village
-    landC = vec3(0.41, 0.40, 0.38) * (0.85 + 0.25 * n3) * (1.0 - 0.16 * smoothstep(0.6, 0.85, vnoise(vPos.xz * 0.2)));
+    landC = vec3(0.70, 0.60, 0.50) * (0.85 + 0.25 * n3) * (1.0 - 0.16 * smoothstep(0.6, 0.85, vnoise(vPos.xz * 0.2)));
   } else if (zone > 5.5) {
     landC = grass;
   }
   landC *= mix(0.6, 1.0, smoothstep(0.0, 3.5, bd));      // contact shadow at building feet
   vec3 green = grass;
   vec3 c = mix(landC, green, g);
-  float fb = smoothstep(0.79, 0.84, vnoise(vPos.xz * 0.028 + 3.0)) * max(g, step(5.5, zone)) * step(0.5, 1.0 - path);
+  float fb = smoothstep(0.90, 0.93, vnoise(vPos.xz * 0.028 + 3.0)) * max(g, step(5.5, zone)) * step(0.5, 1.0 - path);
   vec3 flowerC = mix(hsv(fract(0.80 + 0.36 * vnoise(vPos.xz * 0.012 + 9.0)), 0.62, 0.9), vec3(0.95, 0.92, 0.85), step(0.72, n4));
   c = mix(c, mix(grass, flowerC, 0.55 + 0.45 * step(0.45, n3)), fb);
-  c = mix(c, vec3(0.62, 0.58, 0.52), path);
-  c = mix(c, vec3(0.34, 0.35, 0.36), minor);
-  c = mix(c, vec3(0.27, 0.28, 0.30), major);
-  c = mix(c, vec3(0.26, 0.40, 0.19), lip * (1.0 - smoothstep(0.35, 0.75, w)));
+  c = mix(c, vec3(0.86, 0.78, 0.64), path);
+  c = mix(c, vec3(0.60, 0.58, 0.55), minor);
+  c = mix(c, vec3(0.52, 0.51, 0.50), major);
+  c = mix(c, vec3(0.42, 0.58, 0.24), lip * (1.0 - smoothstep(0.35, 0.75, w)));
   vec3 lc = c * lightL;
   // road light at night
   vec3 nightRoad = vec3(1.0, 0.58, 0.22) * (major * 1.25 + minor * 0.55 + path * 0.12) + vec3(0.10, 0.055, 0.02) * smoothstep(0.1, 0.6, r);
@@ -78,10 +78,10 @@ void main(){
   vec3 wn = normalize(vec3(nx * 0.16 * wfade, 1.0, nz * 0.16 * wfade));
   vec3 R = reflect(-V, wn);
   float F = 0.02 + 0.98 * pow(1.0 - max(dot(wn, V), 0.0), 5.0);
-  vec3 deep = mix(vec3(0.05, 0.15, 0.19), vec3(0.08, 0.20, 0.23), n1) * (amb + uLightCol * 0.3 * sh);
+  vec3 deep = mix(vec3(0.05, 0.34, 0.42), vec3(0.08, 0.42, 0.48), n1) * (amb + uLightCol * 0.3 * sh);   // style A: turquoise
   float shallow = smoothstep(0.06, 0.5, 1.0 - textureLod(uTex, clamp(uv, 0.0, 1.0), 2.5).r);
-  deep = mix(deep, vec3(0.10, 0.31, 0.31) * (amb + uLightCol * 0.4 * sh), shallow * (1.0 - uNight * 0.7));
-  vec3 wc = mix(deep, skyColor(R) * 0.85, clamp(F * 1.1 + 0.05, 0.0, 1.0));
+  deep = mix(deep, vec3(0.24, 0.66, 0.62) * (amb + uLightCol * 0.4 * sh), shallow * (1.0 - uNight * 0.7));
+  vec3 wc = mix(deep, skyColor(R) * 0.85, clamp(F * 0.8 + 0.03, 0.0, 1.0));
   wc += uLightCol * pow(max(dot(R, L), 0.0), 300.0) * 6.0 * sh * (1.0 - uNight);
   float shore = 1.0 - blurW;
   wc += vec3(1.0, 0.55, 0.22) * shore * shore * 0.35 * uNight * (0.7 + 0.6 * abs(nx) * wfade);

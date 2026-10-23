@@ -83,8 +83,9 @@ export function makeProps(D, extraTrees, meshMat, scene, shadowScene) {
   const round = { near: templateAttrs(treeTemplate(false), TREE_LAYOUT), far: templateAttrs(treeTemplateFar(false), TREE_LAYOUT) };
   const palm = { near: templateAttrs(treeTemplate(true), TREE_LAYOUT), far: templateAttrs(treeTemplateFar(true), TREE_LAYOUT) };
   const tm = makeTreeMaterial(), tsm = makeTreeShadowMaterial();
-  const sets = [[round, treeInstances(SHRUBS, 0.34, 0.12)], [round, treeInstances(D.trees, 0.8, 0.7)], [palm, treeInstances(D.palms, 0.85, 0.4)],
-    [round, treeInstances(extraTrees.x, 1.0, 0.9, extraTrees.y)]];
+  // style A: model-railway trees, a third larger than life
+  const sets = [[round, treeInstances(SHRUBS, 0.42, 0.15)], [round, treeInstances(D.trees, 1.05, 0.9)], [palm, treeInstances(D.palms, 1.0, 0.45)],
+    [round, treeInstances(extraTrees.x, 1.25, 1.0, extraTrees.y)]];
   PROPS.trees = sets.map(([T, inst]) => new InstCells({ T: T.near, Tfar: T.far, inst, layout: TREE_INST, pos: TREE_POS, pad: 14, material: tm, shadowMaterial: tsm, lodDist: LOD_TREE, order: 2 }).add(scene, shadowScene));
   // sports grounds, courts, pools, car parks: flat quads drawn by the building shader (materials 12–19)
   const ft = buildFeatures(D); orient(ft.V, ft.I);

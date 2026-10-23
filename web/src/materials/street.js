@@ -26,11 +26,11 @@ void main(){
     float curb = band(abs(across), hw - 3.05, 0.3, fwA);
     vec2 tile = abs(fract(vec2(across, along) / 0.9) - 0.5);
     float grout = (1.0 - smoothstep(0.42, 0.48, max(tile.x, tile.y))) ;
-    c = vec3(0.58, 0.56, 0.52) * (0.92 + 0.12 * n2) * mix(1.0, 0.93 + 0.07 * grout, fade);
-    c = mix(c, vec3(0.74, 0.73, 0.70), curb);
+    c = vec3(0.84, 0.78, 0.68) * (0.92 + 0.12 * n2) * mix(1.0, 0.93 + 0.07 * grout, fade);
+    c = mix(c, vec3(0.93, 0.90, 0.84), curb);
     c = c * lightL + vec3(1.0, 0.62, 0.3) * 0.08 * uNight;
   } else {
-    vec3 asph = vec3(0.16, 0.165, 0.175) * (0.86 + 0.18 * n1 * fade + 0.12 * n2) * (1.0 + (vnoise(vPos.xz * 2.7) - 0.5) * 0.12 * fade);
+    vec3 asph = vec3(0.40, 0.39, 0.385) * (0.86 + 0.18 * n1 * fade + 0.12 * n2) * (1.0 + (vnoise(vPos.xz * 2.7) - 0.5) * 0.12 * fade);
     float lw = ow > 0.5 ? (2.0 * hw) / max(lanes, 1.0) : hw / max(lanes, 1.0);
     float m = 0.0; vec3 mc = vec3(0.88);
     float med = kind > 0.5 ? kind - 1.0 : 0.0, medM = 0.0;
@@ -83,7 +83,7 @@ void main(){
     c = mix(asph, mc, m) * lightL;
     if (medM > 0.5) {
       float curbE = 1.0 - smoothstep(0.2, 0.2 + fwA, med * 0.5 - abs(across));
-      vec3 mg = mix(vec3(0.22, 0.36, 0.15) * (0.8 + 0.4 * n1), vec3(0.72, 0.71, 0.68), curbE);
+      vec3 mg = mix(vec3(0.40, 0.57, 0.23) * (0.8 + 0.4 * n1), vec3(0.90, 0.87, 0.80), curbE);
       c = mg * lightL;
     }
     vec3 V = normalize(uCam - vPos);
@@ -119,7 +119,8 @@ in vec3 vPos; in vec3 vNrm; in vec4 vLight; in float vPart; in float vHue; out v
 void main(){
   vec3 n = normalize(vNrm);
   float sh = shadowAt(vLight);
-  vec3 alb = vPart > 0.5 ? mix(vec3(0.20, 0.36, 0.16), vec3(0.34, 0.46, 0.20), vHue) : vec3(0.32, 0.24, 0.18);
+  // style A: warm leaf greens, a few trees in blossom (pink, pale yellow)
+  vec3 alb = vPart > 0.5 ? (vHue > 0.93 ? vec3(0.95, 0.62, 0.72) : vHue > 0.89 ? vec3(0.96, 0.86, 0.52) : mix(vec3(0.32, 0.50, 0.21), vec3(0.54, 0.65, 0.27), vHue)) : vec3(0.46, 0.32, 0.22);
   float wrap = max(dot(n, uLightDir) * 0.7 + 0.3, 0.0);
   vec3 amb = mix(vec3(0.20, 0.22, 0.18), skyAmb(), n.y * 0.5 + 0.5) * (1.0 - uNight * 0.85);
   vec3 c = alb * (amb * 0.8 + uLightCol * wrap * sh) * mix(0.75, 1.0, smoothstep(0.0, 8.0, vPos.y));
