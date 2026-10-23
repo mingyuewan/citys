@@ -14,6 +14,8 @@ A floating-island 3D city of Shenzhen Bay (Houhai, Nanshan) rendered in the brow
 - `tools/osm/fetch_osm.py` – real OSM buildings / coastline / water / green areas: `fetch` (needs network, run locally) then `bake` (offline) → `data/osm/buildings.json`, `data/osm/areas.json`. Bake is tested on a synthetic sample; fetch has not yet been run against live Overpass.
 - `tools/blender/`, `blender/`, `renders/` – Blender scene built from the page's real GPU buffers; see `docs/render-notes.md`.
 - `tools/webgl_check.py` – smoke tests and A/B frame timing.
+- `web/` – three.js r160 port in progress (phase 1, branch `threejs-migration`). Serve the project root and open `/web/index.html`. Shader GLSL in `web/src/materials/` is copied verbatim from `src/city.src.html` into `RawShaderMaterial`s; shared uniforms live in `materials/common.js` (`U`). `web/data/szbay.json` is a symlink to `data/szbay.json`. Ported so far: island body, city mesh, ground/bay, sky, cloud sea, shadows, bloom + composite, camera/tour, UI, picking.
+- `tools/compare_views.py` – old page vs `web/` screenshots for the six phase-1 views (`build/compare/*-pair.png`).
 - `docs/handoff.md` – handoff: status, direction (art style, flight mode, time presets), phases 1–4, migration plan, test hooks that must be kept.
 
 ## Coordinate system (shared by the page and any Blender assets)

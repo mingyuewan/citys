@@ -1,0 +1,195 @@
+/* Boot, render loop, shadow pass, picking, test hooks.
+   Time comes only from performance.now() / the requestAnimationFrame argument and the loop runs only through
+   requestAnimationFrame: tools/record.py and tools/webgl_check.py replace both to step frames. */
+import * as THREE from "three";
+import { S, reduceMotion } from "./state.js";
+import { ISLE, inIsle, clamp, meshGeometry } from "./world.js";
+import { loadData, loadImg, decodeData } from "./data.js";
+import { buildCity, CONSTRUCT } from "./buildings.js";
+import { buildIsland, FALLS, ISLETS } from "./island.js";
+import { makeGround } from "./ground.js";
+import { sky, makeSky, makeSea } from "./sky.js";
+import { U } from "./materials/common.js";
+import { makeMeshMaterial, makeShadowMaterial } from "./materials/building.js";
+import { Post } from "./post.js";
+import { HOME, VIEWS, flyTo, initCamera, stepCamera, bindInput, startTour, stopTour } from "./camera.js";
+import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey } from "./ui.js";
+
+const canvas = $("#gl");
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", alpha: false });
+} catch (e) {
+  loader.show("浏览器不支持 WebGL2", "请使用最新版 Chrome、Edge、Firefox 或 Safari 打开。", { err: " " }); throw e;
+}
+// the old engine wrote shader output straight to the canvas: no colour management, no three.js tone mapping
+THREE.ColorManagement.enabled = false;
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.autoClear = false;
+const gl = renderer.getContext();
+// GPU context loss (common on mobile when backgrounded): stop drawing, then rebuild by reloading
+const CTX = { lost: false };
+canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); CTX.lost = true; loader.show("显卡上下文已丢失", "正在等待浏览器恢复 WebGL…"); });
+canvas.addEventListener("webglcontextrestored", () => { loader.show("正在恢复", "重新载入场景"); location.reload(); });
+
+const scene = new THREE.Scene(), shadowScene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(0.78 * 180 / Math.PI, 1, 1, 90000);
+const post = new Post(renderer);
+const meshMat = makeMeshMaterial();
+const M = { city: null, island: null, sky: makeSky(), sea: makeSea(), ground: null };
+scene.add(M.sky, M.sea);
+
+/* ---------------- textures (GPT Image, downscaled by tools/make_web_textures.py) ---------------- */
+const TEX = { rock: null, facade: null };
+function loadTex(url, repeat) {
+  return new Promise(res => new THREE.TextureLoader().load(url, t => {
+    // v = up, like the facade UVs (flipY on, the three.js default); sampled raw, no sRGB decode
+    t.wrapS = t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    res(t);
+  }, undefined, () => res(null)));
+}
+const texReady = Promise.all([loadTex("assets/island-rock.webp", true), loadTex("assets/tower-facade.webp", true)])
+  .then(([rock, facade]) => { TEX.rock = rock; TEX.facade = facade; });
+
+/* ---------------- shadow map ----------------
+   Depth texture with hardware compare (sampler2DShadow in the shaders), sized to the device, refit around the focus each frame. */
+const LOW_END = matchMedia("(pointer: coarse)").matches || Math.min(screen.width, screen.height) < 700;
+const SM = { size: Math.min(LOW_END ? 2048 : 3072, renderer.capabilities.maxTextureSize), on: true, texel: 0, rt: null, cam: new THREE.OrthographicCamera() };
+{
+  const dt = new THREE.DepthTexture(SM.size, SM.size);
+  dt.minFilter = dt.magFilter = THREE.LinearFilter; dt.compareFunction = THREE.LessEqualCompare;
+  SM.rt = new THREE.WebGLRenderTarget(SM.size, SM.size, { depthTexture: dt, format: THREE.RedFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+}
+const shadowMat = makeShadowMaterial();
+
+/* ---------------- resolution ---------------- */
+const PERF = { scale: (window.SZ_TEST && window.SZ_TEST.scale) || 1 };
+const VIEW = { cw: Math.max(1, canvas.clientWidth), ch: Math.max(1, canvas.clientHeight) };
+new ResizeObserver(es => { const r = es[es.length - 1].contentRect; VIEW.cw = Math.max(1, r.width); VIEW.ch = Math.max(1, r.height); }).observe(canvas);
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(3.2e6 / (VIEW.cw * VIEW.ch))) * PERF.scale;
+  const w = Math.max(1, Math.round(VIEW.cw * dpr)), h = Math.max(1, Math.round(VIEW.ch * dpr));
+  if (canvas.width !== w || canvas.height !== h) renderer.setSize(w, h, false);
+  post.setSize(w, h);
+}
+
+/* ---------------- build scene ---------------- */
+async function buildScene() {
+  const D = await loadData();
+  window.D = D; S.R = D.R; initCamera(D);
+  await texReady;
+  loader.show("正在搭建深圳湾", `${fmt(D.roads.length)} 条道路 · ${fmt(D.buildings.length + D.landmarks.length)} 栋楼`);
+  await sleep(30);
+  const [maskImg, luImg] = await Promise.all([loadImg(D.mask), loadImg(D.lu)]);
+  const osm = decodeData(D); S.osm = osm;
+  const city = buildCity(osm, D);
+  S.lmIdx = city.lmEnd; S.tris = city.I.length / 3;
+  M.city = new THREE.Mesh(meshGeometry(city.V, city.I), meshMat);
+  loader.show("正在绘制地面", "海岸、绿地与道路"); await sleep(30);
+  M.ground = makeGround(osm, D, maskImg, luImg, renderer);
+  loader.show("正在升起岛屿", "岩层、垂岩、瀑布与小浮岛"); await sleep(30);
+  const isle = buildIsland(maskImg, D); S.waterAt = isle.waterAt;
+  M.island = new THREE.Mesh(meshGeometry(isle.V, isle.I), meshMat);
+  M.city.frustumCulled = M.island.frustumCulled = false;   // vertices are lifted in the shader during the rise
+  M.island.renderOrder = 1;
+  M.city.geometry.computeBoundingSphere();
+  scene.add(M.ground, M.city, M.island);
+  for (const m of [M.city, M.island]) { const s = new THREE.Mesh(m.geometry, shadowMat); s.frustumCulled = false; shadowScene.add(s); }
+
+  let tallest = -1, th = 0;
+  osm.buildings.forEach((b, i) => { if (b.h > th) { th = b.h; tallest = i; } });
+  S.tallest = tallest;
+  fillUI(osm, D, { construct: CONSTRUCT.length, falls: FALLS.groups.length, islets: ISLETS.length });
+  S.sel = -1; $("#card").hidden = true;
+  S.rise = reduceMotion ? 1 : 0; S.riseStart = performance.now(); S.ready = true;
+  S.cam = { tx: 0, tz: 0, ty: -400, yaw: -0.3, pitch: 0.75, dist: 21000 };
+  flyTo(HOME(), reduceMotion ? 0 : 7000);
+  loader.hide();
+}
+
+/* ---------------- picking: ray against the city mesh, building index from the bid attribute ---------------- */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function pick(cx, cy) {
+  if (!S.ready || CTX.lost) return;
+  const r = canvas.getBoundingClientRect();
+  ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObject(M.city, false)[0];
+  const id = hit ? M.city.geometry.attributes.bid.getX(hit.face.a) : -1;
+  if (id >= 0 && id < S.osm.buildings.length) showCard(id); else closeCard();
+}
+
+/* ---------------- render loop ---------------- */
+let last = performance.now();
+const v3 = (u, a) => u.value.set(a[0], a[1], a[2]);
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (CTX.lost) return;
+  resize();
+  // clock
+  if (Math.abs(S.todTarget - S.tod) > 0.001) { S.tod += (S.todTarget - S.tod) * Math.min(1, dt * 2.2); if (Math.abs(S.todTarget - S.tod) < 0.01) S.tod = S.todTarget; }
+  const L = sky(S.tod);
+  applyModeUI(L.night);
+  S.wind[0] += dt * 6; S.wind[1] += dt * 2.5;
+  if (S.ready && S.rise < 1) S.rise = Math.min(1, (now - S.riseStart) / 4200);
+
+  // camera
+  const [eye, tgt] = stepCamera(now, reduceMotion && S.tour ? 0 : dt);
+  const W = canvas.width, H = canvas.height;
+  const dist = Math.hypot(eye[0] - tgt[0], eye[1] - tgt[1], eye[2] - tgt[2]);
+  camera.near = clamp(Math.min(dist, Math.abs(eye[1]) + 60) * 0.02, 0.8, 60); camera.far = 90000; camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  camera.position.set(eye[0], eye[1], eye[2]); camera.up.set(0, 1, 0); camera.lookAt(tgt[0], tgt[1], tgt[2]); camera.updateMatrixWorld();
+  U.uVP.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+
+  if (!S.ready) {
+    renderer.setRenderTarget(null); renderer.setClearColor(new THREE.Color(0.05, 0.06, 0.09), 1); renderer.clear();
+    return;
+  }
+
+  // shadow map fitted around the focus, snapped to texels
+  const focus = S.tour || S.follow ? [eye[0] + (tgt[0] - eye[0]) * 0.4, 0, eye[2] + (tgt[2] - eye[2]) * 0.4] : [tgt[0], 0, tgt[2]];
+  const hs = clamp((S.tour || S.follow ? Math.max(500, Math.abs(eye[1]) * 2.2) : dist * 0.75), 350, 4300);
+  const texelW = 2 * hs / SM.size; SM.texel = texelW;
+  const fx = Math.round(focus[0] / texelW) * texelW, fz = Math.round(focus[2] / texelW) * texelW;
+  const ld = L.lightDir, lc = SM.cam;
+  lc.left = -hs; lc.right = hs; lc.bottom = -hs; lc.top = hs; lc.near = 100; lc.far = 10000; lc.updateProjectionMatrix();
+  lc.position.set(fx + ld[0] * 5000, ld[1] * 5000, fz + ld[2] * 5000);
+  if (Math.abs(ld[1]) > 0.99) lc.up.set(1, 0, 0); else lc.up.set(0, 1, 0);
+  lc.lookAt(fx, 0, fz); lc.updateMatrixWorld();
+  U.uLightVP.value.multiplyMatrices(lc.projectionMatrix, lc.matrixWorldInverse);
+
+  // uniforms shared by every scene material
+  v3(U.uSunDir, L.sun); v3(U.uLightDir, L.lightDir); v3(U.uLightCol, L.lightCol);
+  U.uNight.value = L.night; U.uGold.value = L.gold; v3(U.uCam, eye);
+  U.uFogDen.value = 1 / (S.R * (6.5 + 3.5 * (1 - L.night)));
+  U.uIsle.value.set(ISLE.R0, ISLE.thH, ISLE.lobe);
+  U.uTime.value = now / 1000; U.uWind.value.set(S.wind[0], S.wind[1]);
+  U.uShadow.value = SM.rt.depthTexture; U.uShadowOn.value = L.dayF > 0.15 && SM.on ? 1 : 0;
+  U.uShadowTexel.value.set(1 / SM.size, 1 / SM.size); U.uNOff.value = SM.texel * 1.5;
+  U.uRise.value = S.rise; U.uMaxR.value = S.R * 1.42;
+  U.uRock.value = TEX.rock || U.uRock.value; U.uFacade.value = TEX.facade || U.uFacade.value;
+  U.uTexOn.value.set(TEX.rock ? 1 : 0, TEX.facade ? 1 : 0);
+  M.sky.material.uniforms.uInvVP.value.copy(U.uVP.value).invert(); v3(M.sky.material.uniforms.uMoonDir, L.moon);
+  const mu = meshMat.uniforms;
+  mu.uSel.value = S.sel; mu.uLit.value = L.lit; mu.uAccent.value = L.night > 0.5 ? [1.6, 1.0, 0.35] : [0.85, 0.45, 0.12];
+  M.city.geometry.setDrawRange(0, S.showGen ? Infinity : S.lmIdx);
+
+  if (L.dayF > 0.15 && SM.on) {
+    renderer.setRenderTarget(SM.rt); renderer.clear(false, true, false);
+    renderer.render(shadowScene, lc);
+  }
+  post.render(scene, camera, L);
+}
+requestAnimationFrame(tick);
+
+/* ---------------- boot ---------------- */
+initUI();
+bindInput(canvas, { onClick: pick, onKey });
+// test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
+Object.assign(window, { S, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, inIsle, pick,
+  canvas, gl, renderer, camera, post, SM, CTX });
+window.__dbg = { scene, shadowScene, M, meshMat, post, SM, U, THREE };   // debugging / profiling only
+buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });

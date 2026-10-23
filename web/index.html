@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>深圳湾空中城市</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed WebGL scene; title plate top-left, control rail bottom-left, info card top-right.
+   The UI follows the scene's own clock (day / dusk / night) rather than the OS theme. */
+:root {
+  --ink: #e9ecf2;
+  --ink-dim: #9aa5b8;
+  --panel: rgba(12, 17, 28, 0.70);
+  --panel-line: rgba(160, 180, 210, 0.18);
+  --accent: #f2a541;      /* sodium streetlight amber */
+  --accent-ink: #1b1305;
+  --bg: #070a12;
+  --danger: #ff7a6b;
+  --f-display: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html[data-mode="day"] {
+  --ink: #17202c;
+  --ink-dim: #566173;
+  --panel: rgba(250, 248, 243, 0.76);
+  --panel-line: rgba(40, 60, 80, 0.16);
+  --accent: #c8691a;
+  --accent-ink: #fff8ef;
+  --bg: #d9dfe4;
+  --danger: #b4321f;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#gl.dragging { cursor: grabbing; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  transition: background .6s, color .6s, border-color .6s;
+}
+
+#plate {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px));
+  padding: 14px 18px 12px;
+  max-width: min(370px, calc(100vw - 32px));
+  pointer-events: none;
+}
+#plate .eyebrow { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; color: var(--ink-dim); text-transform: uppercase; margin-right: 58px; }
+#plate .plate-x { position: absolute; top: 8px; right: 8px; pointer-events: auto; padding: 7px 10px; font-size: 12px; border: 1px solid var(--panel-line); }
+#plate.collapsed { padding: 8px 12px 8px 14px; }
+#plate.collapsed .eyebrow, #plate.collapsed .coords, #plate.collapsed #stats, #plate.collapsed #sky, #plate.collapsed #hint { display: none; }
+#plate.collapsed h1 { font-size: 18px; margin: 2px 64px 2px 0; }
+#plate.collapsed #credit { font-size: 10.5px; margin-top: 2px; }
+#plate h1 {
+  margin: 4px 0 2px; font-family: var(--f-display); font-weight: 900;
+  font-size: clamp(26px, 4.2vw, 38px); line-height: 1.1; letter-spacing: .04em; text-wrap: balance;
+}
+#plate h1 span { color: var(--accent); }
+#plate .coords { font-family: var(--f-mono); font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+#stats { margin-top: 8px; font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; line-height: 1.55; }
+#stats b { color: var(--ink); font-weight: 500; font-family: var(--f-mono); }
+#credit { font-size: 11px; color: var(--ink-dim); margin-top: 4px; line-height: 1.5; }
+#credit a { color: inherit; pointer-events: auto; }
+#sky { margin-top: 6px; font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+#sky b { color: var(--ink); font-weight: 500; }
+
+#rail {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 6px;
+  max-width: calc(100vw - 32px);
+}
+.btn {
+  appearance: none; border: 1px solid transparent; background: transparent; color: var(--ink);
+  font: 500 13px/1 var(--f-body); padding: 9px 12px; border-radius: 7px; cursor: pointer;
+  display: inline-flex; gap: 6px; align-items: center; white-space: nowrap;
+}
+.btn:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.btn .k { font-family: var(--f-mono); font-size: 11px; opacity: .6; }
+.sep { width: 1px; height: 22px; background: var(--panel-line); margin: 0 2px; }
+select {
+  appearance: none; background: transparent; color: var(--ink); border: 1px solid var(--panel-line);
+  font: 500 13px/1 var(--f-body); padding: 8px 26px 8px 10px; border-radius: 7px; cursor: pointer; max-width: 210px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
+}
+select option { color: #111; }
+.clock { display: inline-flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; }
+.clock output { font: 500 13px/1 var(--f-mono); min-width: 3.2em; font-variant-numeric: tabular-nums; }
+.clock input[type="range"] { width: 140px; accent-color: var(--accent); }
+
+#card {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  width: min(300px, calc(100vw - 32px));
+  padding: 14px 16px;
+}
+#card h2 { margin: 0 28px 6px 0; font: 600 18px/1.3 var(--f-display); text-wrap: balance; }
+#card dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-size: 13px; }
+#card dt { color: var(--ink-dim); }
+#card dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+#card .est { color: var(--ink-dim); font-family: var(--f-body); font-size: 12px; }
+#card .x { position: absolute; top: 8px; right: 8px; padding: 6px 8px; }
+
+#loader {
+  position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#loader .box { pointer-events: auto; padding: 22px 24px; width: min(440px, 100%); }
+#loader h3 { margin: 0 0 6px; font: 600 17px/1.35 var(--f-display); }
+#loader p { margin: 6px 0; color: var(--ink-dim); line-height: 1.6; max-width: 62ch; }
+#loader .bar { height: 3px; background: var(--panel-line); border-radius: 2px; overflow: hidden; margin-top: 14px; }
+#loader .bar i { display: block; height: 100%; width: 30%; background: var(--accent); border-radius: 2px; animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+#loader .err { color: var(--danger); font-family: var(--f-mono); font-size: 12px; white-space: pre-wrap; }
+
+#labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -100%);
+  white-space: nowrap; text-align: center; will-change: transform;
+  text-shadow: 0 1px 2px rgba(0,0,0,.65), 0 0 8px rgba(0,0,0,.45);
+  color: #f5f2ea; transition: opacity .3s;
+}
+html[data-mode="day"] .lbl { color: #1a2230; text-shadow: 0 0 3px rgba(255,255,255,.95), 0 0 9px rgba(255,255,255,.8); }
+.lbl.bld { font: 500 12px/1.25 var(--f-body); }
+.lbl.bld::after { content: ""; display: block; width: 1px; height: 14px; margin: 3px auto 0; background: currentColor; opacity: .55; }
+.lbl.bld small { display: block; font: 400 10.5px/1.2 var(--f-mono); opacity: .75; }
+.lbl.area { font: 600 15px/1 var(--f-display); letter-spacing: .5em; transform: translate(-50%, -50%); opacity: .85; }
+.lbl.sea { font: 600 20px/1 var(--f-display); letter-spacing: .9em; color: #bfe6e4; transform: translate(-50%, -50%); }
+html[data-mode="day"] .lbl.sea { color: #0f5b61; }
+.lbl.air { font: 500 11px/1.2 var(--f-mono); opacity: .8; transform: translate(-50%, -150%); }
+body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
+
+#hint { font-size: 11.5px; color: var(--ink-dim); margin-top: 4px; line-height: 1.5; }
+#hint b { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 760px) {
+  #hint { display: none; }
+  #card { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+  .btn .k { display: none; }
+  #plate { padding: 10px 14px; }
+  #stats, #credit { font-size: 11px; }
+  #sky { display: none; }
+  .clock input[type="range"] { width: 110px; }
+}
+@media (prefers-reduced-motion: reduce) { #loader .bar i { animation: none; width: 100%; opacity: .5; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="gl" aria-label="深圳湾 3D 城市场景"></canvas>
+<div id="labels" aria-hidden="true"></div>
+
+<header id="plate" class="panel">
+  <button class="btn plate-x" id="bPlate" type="button" aria-expanded="true" aria-controls="plate">收起</button>
+  <div class="eyebrow">Floating Island · 南山后海 · Aerial 3D</div>
+  <h1>深圳湾<span>·</span>空中之岛</h1>
+  <div class="coords" id="coords">22.5150°N 113.9420°E</div>
+  <div id="stats">正在准备…</div>
+  <div id="sky"></div>
+  <div id="hint"><b>拖动</b> 平移 · <b>右键/Shift 拖动</b> 旋转 · <b>滚轮</b> 缩放 · <b>点击</b> 楼体查看</div>
+  <div id="credit">道路 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 贡献者</a> · 地标坐标与高度：维基百科 · 其余楼体按真实街区生成</div>
+</header>
+
+<nav id="rail" class="panel" aria-label="视图控制">
+  <span class="clock"><label for="tod" class="sr">时间</label><input id="tod" type="range" min="5" max="28.9" step="0.05" value="15.5" aria-label="一天中的时间"><output id="todOut" for="tod">15:30</output></span>
+  <button class="btn" id="bMode" type="button" aria-pressed="false" title="白天 / 夜晚 (N)">夜景 <span class="k">N</span></button>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="btn" id="bTour" type="button" aria-pressed="false" title="空中漫游 (F)">空中漫游 <span class="k">F</span></button>
+  <button class="btn" id="bOrbit" type="button" aria-pressed="false" title="自动环绕 (R)">环绕 <span class="k">R</span></button>
+  <button class="btn" id="bHome" type="button" title="回到总览 (H)">总览 <span class="k">H</span></button>
+  <select id="selLm" aria-label="飞往">
+    <option value="">飞往…</option>
+  </select>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="btn" id="bCloud" type="button" aria-pressed="true" title="云层 (C)">云层 <span class="k">C</span></button>
+  <button class="btn" id="bGen" type="button" aria-pressed="true" title="显示/隐藏生成的楼体 (G)">生成楼体 <span class="k">G</span></button>
+</nav>
+
+<aside id="card" class="panel" hidden aria-live="polite">
+  <button class="btn x" id="bClose" type="button" aria-label="关闭">✕</button>
+  <h2 id="cName">—</h2>
+  <dl id="cList"></dl>
+</aside>
+
+
+<div id="loader">
+  <div class="box panel" role="status">
+    <h3 id="lTitle">正在搭建深圳湾</h3>
+    <p id="lText">读取内置的道路、海岸与楼体数据</p>
+    <div class="err" id="lErr" hidden></div>
+    <div class="bar" id="lBar"><i></i></div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
