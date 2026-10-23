@@ -1,7 +1,9 @@
 """Frame-by-frame demo recorder for 深圳湾空中之岛.
 usage: python3 tools/record.py OUTDIR [--test|--bench] [--page index.html | --page http://127.0.0.1:8765/web/index.html]
 (the three.js page in web/ uses ES modules and fetch: serve the project root and pass its URL)
-env: VW, VH, FPS (default 1280x720@30); CHROME = Chrome executable (default: Playwright's bundled Chromium). Encode afterwards, e.g.
+env: VW, VH, FPS (default 1280x720@30); CHROME = Chrome executable (default: Playwright's bundled Chromium);
+     GPU=1 renders with the GPU (ANGLE Metal) instead of SwiftShader — much faster where there is one.
+The web/ page adds two shots (morning mist, the seaplane through a waterfall); the old page skips them. Encode afterwards, e.g.
   ffmpeg -framerate 24 -i OUTDIR/f_%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 18 demo.mp4
 """
 import base64
@@ -34,7 +36,7 @@ window.__T = 1000;
 SETUP = r"""
 (() => {
   const st = document.createElement("style");
-  st.textContent = `#rail,#plate,#card,#loader,#hint{display:none!important}
+  st.textContent = `#rail,#plate,#card,#loader,#hint,#flyhud,#intro{display:none!important}
   #cap{position:fixed;left:56px;bottom:52px;color:#fff;font-family:"Noto Serif CJK SC","Noto Serif CJK TC",serif;text-shadow:0 2px 14px rgba(0,0,0,.55),0 0 2px rgba(0,0,0,.6);pointer-events:none}
   #cap .t{font-size:40px;font-weight:900;letter-spacing:.06em}
   #cap .s{font-family:"Noto Sans CJK SC","Noto Sans CJK TC",sans-serif;font-size:17px;font-weight:500;letter-spacing:.12em;opacity:.9;margin-top:8px}
@@ -61,12 +63,17 @@ SETUP = r"""
   const SH = AIR.show;
   const showView = { tx: SH.anchor[0] - SH.f[0] * 300, tz: SH.anchor[2] - SH.f[2] * 300, ty: 210, yaw: Math.atan2(-SH.f[0], -SH.f[2]), pitch: 0.1, dist: 1050 };
   const setT = v => { S.tod = S.todTarget = v; };
+  const NEW = typeof choosePreset === "function";            // the three.js page: presets, flight
+  const mood = id => { if (NEW) choosePreset(id, false); };
   window.SHOTS = [
-    { sec: 8, t: "深圳湾 · 空中之岛", s: "南山后海 · 真实 OSM 路网与地标",
-      init() { setT(15.6); S.rise = 0; S.riseStart = performance.now(); },
+    { sec: 8, t: "深圳湾 · 空中之岛", s: NEW ? "南山后海 · 真实路网、OSM 建筑与地标" : "南山后海 · 真实 OSM 路网与地标",
+      init() { mood("day"); setT(15.6); S.rise = 0; S.riseStart = performance.now(); },
       frame(k) { cam(mix({ tx: 0, tz: 0, ty: -500, yaw: -0.25, pitch: 0.62, dist: 20000 }, { tx: 0, tz: 0, ty: -350, yaw: -0.9, pitch: 0.27, dist: 9000 }, ez(k))); } },
+    ...(NEW ? [{ sec: 6, t: "晨雾", s: "云海最厚，岛半隐半现",
+      init() { mood("mist"); S.rise = 1; },
+      frame(k) { cam(mix({ tx: 0, tz: 0, ty: -300, yaw: -1.25, pitch: 0.2, dist: 8600 }, { tx: 0, tz: 0, ty: -300, yaw: -0.95, pitch: 0.24, dist: 7600 }, ez(k))); } }] : []),
     { sec: 7, t: "海水从岛缘倾泻而下", s: "五道瀑布 · 云海 · 漂浮的小岛",
-      init() { setT(15.6); S.rise = 1; },
+      init() { mood("day"); setT(15.6); S.rise = 1; },
       frame(k) { const yaw = Math.atan2(G.ox, G.oz); cam(mix({ tx: G.x + G.ox * 200, tz: G.z + G.oz * 200, ty: -420, yaw: yaw + 0.75, pitch: 0.16, dist: 4600 }, { tx: G.x + G.ox * 200, tz: G.z + G.oz * 200, ty: -650, yaw: yaw + 0.15, pitch: 0.06, dist: 3100 }, ez(k))); } },
     { sec: 9, t: "越过岛缘，飞入城市", s: "空中漫游",
       init() { setT(15.6); startTour(); S.tour.speed = 0; },
@@ -76,12 +83,16 @@ SETUP = r"""
       frame(k) { cam({ tx: cr.c[0], tz: cr.c[1], ty: lerp(140, 210, k), yaw: lerp(0.3, 1.5, ez(k)), pitch: lerp(0.18, 0.1, k), dist: lerp(560, 430, k) }); } },
     { sec: 6, t: "街道", s: "车流 · 红绿灯 · 公交站 · 行人",
       init() { setT(12.6); },
-      frame(k) { cam({ tx: -326.9 + lerp(-20, 20, k), tz: -671.7, ty: 0, yaw: lerp(0.35, 0.95, ez(k)), pitch: lerp(0.62, 0.5, k), dist: lerp(150, 115, k) }); } },
+      frame(k) { cam({ tx: -326.9 + lerp(-20, 20, k), tz: -671.7, ty: 0, yaw: lerp(1.9, 2.5, ez(k)), pitch: lerp(0.62, 0.5, k), dist: lerp(150, 115, k) }); } },
+    ...(NEW ? [{ sec: 7, t: "驾驶水上飞机", s: "贴着楼群飞，穿过瀑布",
+      init() { mood("dusk"); const G = FALLS.groups.slice().sort((a, b) => b.w - a.w)[0]; const y = G.y - G.H * 0.18, sh = 6 + 150 * Math.pow(0.18, 1.5) * (G.H / 1400);
+        startFlight([G.x + G.ox * (sh + 560) + G.oz * 260, y + 40, G.z + G.oz * (sh + 560) - G.ox * 260]); FLY.yaw = Math.atan2(-G.oz * 0.9 + G.ox * 0.42, -G.ox * 0.9 - G.oz * 0.42); FLY.pitch = -0.05; FLY.throttle = 0.55; this.G = G; },
+      frame(k) { if (k > 0.98) stopFlight(); } }] : []),
     { sec: 8, t: "日落 · 华灯初上", s: "时间流转 17:00 → 19:35",
       init() {},
       frame(k) { setT(lerp(16.9, 19.6, k)); cam(mix({ tx: 250, tz: 250, ty: 0, yaw: -0.95, pitch: 0.42, dist: 2700 }, { tx: 450, tz: 350, ty: 0, yaw: -0.45, pitch: 0.3, dist: 2200 }, ez(k))); } },
     { sec: 10, t: "无人机灯光秀", s: "九百架无人机 · 孔明灯升空",
-      init() { setT(21); SH.t = 0; },
+      init() { mood("night"); setT(21); SH.t = 0; },
       frame(k) { cam(mix(showView, { ...showView, yaw: showView.yaw + 0.22, dist: 820, ty: 240 }, ez(k))); } },
     { sec: 5, t: "窗后的房间", s: "夜里亮灯的每一间屋子",
       init() { setT(21.2); },
@@ -96,7 +107,8 @@ SETUP = r"""
 """
 
 with sync_playwright() as p:
-    b = p.chromium.launch(executable_path=os.environ.get("CHROME") or None, args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
+    GL = ["--use-angle=metal", "--enable-gpu"] if os.environ.get("GPU") else ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+    b = p.chromium.launch(executable_path=os.environ.get("CHROME") or None, args=GL + ["--ignore-gpu-blocklist"])
     pg = b.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
     pg.set_default_timeout(600000)
     errs = []
