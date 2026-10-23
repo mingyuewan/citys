@@ -108,9 +108,8 @@ select {
   background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
 }
 select option { color: #111; }
-.clock { display: inline-flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; }
-.clock output { font: 500 13px/1 var(--f-mono); min-width: 3.2em; font-variant-numeric: tabular-nums; }
-.clock input[type="range"] { width: 140px; accent-color: var(--accent); }
+.seg { display: inline-flex; gap: 2px; }
+.clock { font: 500 13px/1 var(--f-mono); min-width: 3.2em; padding: 0 8px 0 4px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 
 #card {
   position: fixed;
@@ -165,7 +164,6 @@ body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
   #plate { padding: 10px 14px; }
   #stats, #credit { font-size: 11px; }
   #sky { display: none; }
-  .clock input[type="range"] { width: 110px; }
 }
 @media (prefers-reduced-motion: reduce) { #loader .bar i { animation: none; width: 100%; opacity: .5; } }
 </style>
@@ -189,8 +187,13 @@ body.touring .lbl.bld, body.touring .lbl.air { opacity: 0 !important; }
 </header>
 
 <nav id="rail" class="panel" aria-label="视图控制">
-  <span class="clock"><label for="tod" class="sr">时间</label><input id="tod" type="range" min="5" max="28.9" step="0.05" value="15.5" aria-label="一天中的时间"><output id="todOut" for="tod">15:30</output></span>
-  <button class="btn" id="bMode" type="button" aria-pressed="false" title="白天 / 夜晚 (N)">夜景 <span class="k">N</span></button>
+  <span class="seg" role="group" aria-label="时段">
+    <button class="btn" type="button" data-preset="mist" aria-pressed="false" title="晨雾 (1)">晨雾 <span class="k">1</span></button>
+    <button class="btn" type="button" data-preset="day" aria-pressed="true" title="白昼 (2)">白昼 <span class="k">2</span></button>
+    <button class="btn" type="button" data-preset="dusk" aria-pressed="false" title="黄昏 (3)">黄昏 <span class="k">3</span></button>
+    <button class="btn" type="button" data-preset="night" aria-pressed="false" title="夜 (4)">夜 <span class="k">4</span></button>
+  </span>
+  <output class="clock" id="todOut">14:36</output>
   <span class="sep" aria-hidden="true"></span>
   <button class="btn" id="bTour" type="button" aria-pressed="false" title="空中漫游 (F)">空中漫游 <span class="k">F</span></button>
   <button class="btn" id="bOrbit" type="button" aria-pressed="false" title="自动环绕 (R)">环绕 <span class="k">R</span></button>

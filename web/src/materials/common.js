@@ -8,7 +8,7 @@ const HEAD = `precision highp float; precision highp int; precision highp sample
 
 const COMMON = `
 uniform vec3 uSunDir; uniform vec3 uLightDir; uniform vec3 uLightCol; uniform float uNight; uniform float uGold;
-uniform vec3 uCam; uniform float uFogDen; uniform float uTime; uniform vec2 uWind; uniform vec3 uIsle;
+uniform vec3 uCam; uniform float uFogDen; uniform float uMist; uniform float uTime; uniform vec2 uWind; uniform vec3 uIsle;
 ${ISLE_GLSL}
 float h21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 float h31(vec3 p){ return h21(p.xy + p.z*17.13); }
@@ -33,6 +33,9 @@ vec3 skyAmb(){ return uSkyAmb; }
 vec3 fogIt(vec3 c, vec3 p){
   vec3 v = p - uCam; float d = length(v);
   float f = 1.0 - exp(-pow(d * uFogDen, 1.5));
+  // the morning mist (preset 晨雾): a haze layer filling the air round and under the island, up to its rim
+  float mist = uMist * (1.0 - smoothstep(-700.0, 40.0, p.y)) * smoothstep(150.0, 2600.0, d);
+  f = 1.0 - (1.0 - f) * (1.0 - 0.9 * mist);
   vec3 fc = skyColor(vec3(v.x, abs(v.y) * 0.08 + 0.02 * d, v.z));
   return mix(c, fc, clamp(f, 0.0, 1.0));
 }
@@ -64,7 +67,7 @@ const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
 export const U = {
   uVP: { value: new THREE.Matrix4() }, uLightVP: { value: new THREE.Matrix4() },
   uSunDir: { value: new THREE.Vector3() }, uLightDir: { value: new THREE.Vector3() }, uLightCol: { value: new THREE.Vector3() },
-  uNight: { value: 0 }, uGold: { value: 0 }, uCam: { value: new THREE.Vector3() }, uFogDen: { value: 1e-4 }, uTime: { value: 0 },
+  uNight: { value: 0 }, uGold: { value: 0 }, uCam: { value: new THREE.Vector3() }, uFogDen: { value: 1e-4 }, uMist: { value: 0 }, uTime: { value: 0 },
   uWind: { value: new THREE.Vector2() }, uIsle: { value: new THREE.Vector3() }, uSkyAmb: { value: new THREE.Vector3() },
   uShadow: { value: null }, uShadowOn: { value: 0 }, uShadowDyn: { value: null }, uShadowDynOn: { value: 0 }, uShadowTexel: { value: new THREE.Vector2(1, 1) }, uNOff: { value: 0 },
   uRise: { value: 0 }, uMaxR: { value: 1 },

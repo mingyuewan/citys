@@ -39,12 +39,15 @@ VIEWS = {
     "dusk": ("VIEWS['v-city']()", 17.3),
     "night": ("VIEWS['v-city']()", 21.0),
     "under": ("VIEWS['v-under']()", 15.5),
+    "p-mist": ("HOME()", "mist"), "p-day": ("HOME()", "day"), "p-dusk": ("VIEWS['v-city']()", "dusk"), "p-night": ("VIEWS['v-city']()", "night"), "p-nightc": ("({ tx: 300, tz: -300, ty: 0, yaw: 0.4, pitch: 0.6, dist: 700 })", "night"),
     "bamboo": ("(() => { const l = D.landmarks.find(l => l.k === 'bamboo'); return { tx: l.c[0], tz: l.c[1], ty: 170, yaw: 0.9, pitch: 0.16, dist: 620 }; })()", 15.5),
     "cocoon": ("(() => { const l = D.landmarks.find(l => l.k === 'cocoon'); return { tx: l.c[0], tz: l.c[1], ty: 0, yaw: 0.5, pitch: 0.42, dist: 560 }; })()", 15.5),
     "rock": ("({ tx: -1700, tz: 1700, ty: -650, yaw: -0.785, pitch: 0.05, dist: 2300 })", 15.5),
 }
+# tod: hours, or a preset id ("mist", "day", "dusk", "night") applied at once through window.choosePreset
 SET = """([v, tod]) => { S.fly = null; S.follow = null; S.tour = null; S.orbit = false; S.rise = 1;
-  Object.assign(S.cam, eval(v)); S.tod = S.todTarget = tod; for (let i = 0; i < 6; i++) window.__step(16.7); }"""
+  Object.assign(S.cam, eval(v)); if (typeof tod === "string") choosePreset(tod, false); else S.tod = S.todTarget = tod;
+  for (let i = 0; i < 6; i++) window.__step(16.7); }"""
 os.makedirs(OUT, exist_ok=True)
 with sync_playwright() as p:
     br = p.chromium.launch(executable_path=CHROME, headless=True, args=["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist"])

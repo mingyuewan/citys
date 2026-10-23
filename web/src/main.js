@@ -18,9 +18,10 @@ import { sky, skyAmbient, makeSky, makeSea, makeClouds, updateClouds } from "./s
 import { U } from "./materials/common.js";
 import { makeMeshMaterial, makeShadowMaterial } from "./materials/building.js";
 import { Post, LOOK } from "./post.js";
+import { MOOD, stepPreset, PRESETS } from "./presets.js";
 import { loadModel, toPageGeometry, concatGeometry } from "./models.js";
 import { HOME, VIEWS, flyTo, initCamera, stepCamera, bindInput, startTour, stopTour } from "./camera.js";
-import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus } from "./ui.js";
+import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus, choosePreset } from "./ui.js";
 
 const canvas = $("#gl");
 let renderer;
@@ -220,7 +221,9 @@ function tick(now) {
   // uniforms shared by every scene material
   v3(U.uSunDir, L.sun); v3(U.uLightDir, L.lightDir); v3(U.uLightCol, L.lightCol);
   U.uNight.value = L.night; U.uGold.value = L.gold; v3(U.uCam, eye);
-  U.uFogDen.value = 1 / (S.R * (6.5 + 9.0 * (1 - L.night)));   // style A: clearer air by day
+  stepPreset(now);
+  U.uFogDen.value = MOOD.fog / (S.R * (6.5 + 9.0 * (1 - L.night)));   // style A: clearer air by day; the preset's air on top
+  U.uMist.value = MOOD.mist;
   U.uIsle.value.set(ISLE.R0, ISLE.thH, ISLE.lobe); v3(U.uSkyAmb, skyAmbient(L));
   U.uTime.value = now / 1000; U.uWind.value.set(S.wind[0], S.wind[1]);
   U.uShadow.value = SM.rt.depthTexture; U.uShadowOn.value = L.dayF > 0.15 && SM.on ? 1 : 0;
@@ -238,7 +241,7 @@ function tick(now) {
   updateTraffic(reduceMotion ? 0 : dt, now / 1000, L.night > 0.5, eye);
   const pm = TRAFFIC.lights.material.uniforms; pm.uPx.value = H / (2 * Math.tan(0.39)); pm.uAdd.value = 1;
   updateAir(now / 1000, reduceMotion ? 0 : dt, L, eye); finishAir(H / (2 * Math.tan(0.39)));
-  M.clouds.mesh.visible = S.showClouds; if (S.showClouds) updateClouds(M.clouds, S.wind, eye, L.night, camera);
+  M.clouds.mesh.visible = S.showClouds; if (S.showClouds) updateClouds(M.clouds, S.wind, eye, L.night, camera, MOOD.clouds);
 
   if (L.dayF > 0.15 && SM.on) {
     if (S.rise > 0.9) lc.layers.enable(LATE_SHADOW); else lc.layers.disable(LATE_SHADOW);
@@ -256,7 +259,7 @@ requestAnimationFrame(tick);
 initUI();
 bindInput(canvas, { onClick: pick, onKey });
 // test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
-Object.assign(window, { $, S, PERF, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
+Object.assign(window, { $, S, PERF, setTod, choosePreset, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
   canvas, gl, renderer, camera, post, SM, CTX });
 window.__dbg = { toPageGeometry, LOOK, scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
 buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });

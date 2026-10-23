@@ -100,8 +100,8 @@ void main(){
       vec2 bay = floor(vec2(vUv.x / 6.0, vUv.y / 4.0));
       float epo = floor(uTime / 55.0 + h31(vec3(bay.yx, vBid + 2.0)) * 9.0);
       float on = step(h31(vec3(bay + epo * 0.573, vBid)), lit * 0.5);
-      vec3 lc = mix(cool * vec3(0.85, 0.95, 1.0), warm, step(0.55, h31(vec3(bay.yx, vBid + 3.0))));
-      float bright = (m == 7 ? 0.35 : 0.8) * (0.6 + 0.6 * h31(vec3(bay.x, bay.y + 7.0, vBid)));
+      vec3 lc = mix(cool * vec3(0.85, 0.95, 1.0), warm, step(0.3, h31(vec3(bay.yx, vBid + 3.0))));   // style A: mostly warm office light
+      float bright = (m == 7 ? 0.35 : 0.66) * (0.6 + 0.6 * h31(vec3(bay.x, bay.y + 7.0, vBid)));
       vec3 roomL = vec3(1.0);
       if (inNear > 0.001) {
         float dF, cl; vec3 rc = roomShade(nO, V, vUv, vec3(3.0, 4.0, 6.5), vBid, dF, cl);

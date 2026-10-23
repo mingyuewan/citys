@@ -282,7 +282,10 @@ export function genOsmBuilding(g, b, bid) {
   else if (KIND_WORKS.test(k)) { mat = 3; col = CONC.map(v => v * (0.95 + rnd() * 0.15)); }
   else if (KIND_CIVIC.test(k) && h < 45) { mat = 2; col = GLASS[Math.floor(rnd() * GLASS.length)].map(v => v * 1.1); green = rnd() < 0.35; }
   else { mat = 0; col = GLASS[Math.floor(rnd() * GLASS.length)]; }
-  prism(g, r, y0, h, col, mat, bid, green ? { capCol: [0.32, 0.45, 0.26], capMat: 11 } : { capCol: CONC.map(v => v * 0.95) });
+  const capO = green ? { capCol: [0.32, 0.45, 0.26], capMat: 11 } : { capCol: CONC.map(v => v * 0.95) };
+  if (mat === 2 && h > 12 && y0 === 0) {   // civic / retail: shop fronts on the ground floor, offices above
+    prism(g, r, 0, 7, col.map(v => v * 1.05), 2, bid, { cap: false }); prism(g, r, 7, h, col, 0, bid, capO);
+  } else prism(g, r, y0, h, col, mat, bid, capO);
   if (y0 > 0) return;   // a building:part floating on another part: no roof plant
   if (h > 18 && s > 14) roofUnits(g, cx, cz, s * 0.55, s * 0.55, ang, h, bid, rnd, 1 + (rnd() * 3 | 0));
   if (mat === 1 && h > 60 && rnd() < 0.5) prism(g, scaleRing(r, 1.01, cx, cz), h, h + 1.2, col.map(v => v * 0.9), 3, bid, { cap: false, both: true });

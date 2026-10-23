@@ -6,6 +6,7 @@ import { S, reduceMotion } from "./state.js";
 import { sky, fmtTod } from "./sky.js";
 import { HOME, VIEWS, flyTo, startTour, stopTour, stopUserMotion } from "./camera.js";
 import { AIR } from "./air.js";
+import { PRESETS, ORDER, setPreset, presetForHour } from "./presets.js";
 import { FALLS } from "./island.js";
 
 export const $ = s => document.querySelector(s);
@@ -24,11 +25,11 @@ export function applyModeUI(night) {
   const isNight = night > 0.5, mode = isNight ? "night" : "day";
   if (mode === lastMode) return; lastMode = mode;
   document.documentElement.dataset.mode = mode;
-  $("#bMode").setAttribute("aria-pressed", String(isNight));
-  $("#bMode").firstChild.textContent = isNight ? "日景 " : "夜景 ";
 }
-export function setTod(t, animate) { S.todTarget = t; if (!animate) S.tod = t; $("#tod").value = String(t); $("#todOut").textContent = fmtTod(t); }
-function toggleMode() { const n = sky(S.todTarget).night > 0.5; setTod(n ? 15.5 : 20.6, true); }
+// the clock (tools and presets); the rail shows the time the scene is easing to
+export function setTod(t, animate) { S.todTarget = t; if (!animate) S.tod = t; $("#todOut").textContent = fmtTod(t); }
+export const choosePreset = (id, animate = true) => setPreset(id, setTod, performance.now(), animate && !reduceMotion);
+function toggleMode() { choosePreset(sky(S.todTarget).night > 0.5 ? "day" : "night"); }
 function toggleOrbit() { S.orbit = !S.orbit; $("#bOrbit").setAttribute("aria-pressed", String(S.orbit)); if (S.orbit) { stopTour(); if (S.follow) stopUserMotion(); } }
 function toggleTour() { if (S.tour) stopTour(); else startTour(); }
 function toggleClouds() { S.showClouds = !S.showClouds; $("#bCloud").setAttribute("aria-pressed", String(S.showClouds)); }
@@ -73,15 +74,17 @@ export function showCard(i) {
   $("#card").hidden = false;
 }
 export function onKey(k) {
-  if (k === "n") toggleMode(); else if (k === "r") toggleOrbit(); else if (k === "t") flyTallest(); else if (k === "h") goHome();
+  const pk = ORDER.find(id => PRESETS[id].key === k);
+  if (pk) choosePreset(pk);
+  else if (k === "n") toggleMode(); else if (k === "r") toggleOrbit(); else if (k === "t") flyTallest(); else if (k === "h") goHome();
   else if (k === "g") toggleGen(); else if (k === "f") toggleTour(); else if (k === "c") toggleClouds();
   else if (k === "escape") closeCard();
 }
 
 export function initUI() {
-  $("#bMode").onclick = toggleMode; $("#bOrbit").onclick = toggleOrbit; $("#bHome").onclick = goHome; $("#bTour").onclick = toggleTour;
+  for (const b of document.querySelectorAll("[data-preset]")) b.onclick = () => choosePreset(b.dataset.preset);
+  $("#bOrbit").onclick = toggleOrbit; $("#bHome").onclick = goHome; $("#bTour").onclick = toggleTour;
   $("#bGen").onclick = toggleGen; $("#bCloud").onclick = toggleClouds; $("#bClose").onclick = closeCard;
-  $("#tod").addEventListener("input", e => setTod(+e.target.value, false));
   $("#bPlate").onclick = () => setPlate($("#plate").classList.contains("collapsed"));
   let v = null; try { v = localStorage.getItem("szbay.plate"); } catch (e) {}
   setPlate(v === null ? innerWidth > 760 : v === "1");
@@ -91,14 +94,13 @@ export function initUI() {
     if (v[0] === "b") { flyToBuilding(+v.slice(1)); return; }
     if (v.startsWith("v-")) { flyTo(VIEWS[v](), reduceMotion ? 0 : 3000); return; }
     stopTour(); S.fly = null;
-    if (v === "show") { if (sky(S.todTarget).night < 0.6) setTod(20.6, true); const A = AIR.show.anchor; flyTo({ tx: A[0] - AIR.show.f[0] * 300, tz: A[2] - AIR.show.f[2] * 300, ty: 200, yaw: Math.atan2(-AIR.show.f[0], -AIR.show.f[2]), pitch: 0.12, dist: 900 }, reduceMotion ? 0 : 2600); return; }
+    if (v === "show") { if (sky(S.todTarget).night < 0.6) choosePreset("night"); const A = AIR.show.anchor; flyTo({ tx: A[0] - AIR.show.f[0] * 300, tz: A[2] - AIR.show.f[2] * 300, ty: 200, yaw: Math.atan2(-AIR.show.f[0], -AIR.show.f[2]), pitch: 0.12, dist: 900 }, reduceMotion ? 0 : 2600); return; }
     S.follow = { kind: v, k: 0, sm: null };
     closeCard();
   };
-  // Shenzhen local time
+  // the preset that fits Shenzhen's local time
   const szHour = (new Date().getUTCHours() + 8 + new Date().getUTCMinutes() / 60) % 24;
-  const t0 = szHour < 5 ? szHour + 24 : szHour;
-  setTod(Math.round(t0 * 20) / 20, false);
+  choosePreset(presetForHour(szHour), false);
 }
 
 // once the scene is built: stats line, coordinates, the fly-to menu

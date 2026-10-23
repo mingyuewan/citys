@@ -52,7 +52,7 @@ export class Post {
     u.uDepth.value = this.scene.depthTexture; u.uD0.value = this.dof[0].texture; u.uD1.value = this.dof[1].texture; u.uD2.value = this.dof[2].texture;
     u.uTexD1.value = [1 / this.dof[1].width, 1 / this.dof[1].height]; u.uTexD2.value = [1 / this.dof[2].width, 1 / this.dof[2].height];
     u.uNear.value = camera.near; u.uFar.value = camera.far; u.uFocus.value = focus;
-    u.uTexel.value = [1 / this.w, 1 / this.h]; u.uCav.value = LOOK.cavity;
+    u.uTexel.value = [1 / this.w, 1 / this.h]; u.uCav.value = LOOK.cavity.map((v, i) => i < 2 ? v * (1 - 0.85 * (LOOK.mist || 0)) : v);
     u.uTilt.value = LOOK.tilt; u.uWarm.value = LOOK.warm; u.uLift.value = LOOK.lift; u.uSat.value = LOOK.sat; u.uVig.value = LOOK.vig;
     u.uScene.value = this.scene.texture; u.uBloom.value = B.length ? B[0].texture : this.scene.texture;
     u.uBloomK.value = B.length ? lerp(0.35, 0.9, L.night) : 0; u.uExpo.value = lerp(0.92, 1.15, L.night); u.uNight.value = L.night;

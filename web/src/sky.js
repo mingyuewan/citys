@@ -113,13 +113,14 @@ export function makeClouds(tex) {
   return { puffs, buf, ib, mesh };
 }
 // per frame: drift with the wind (wrapping round a 15 km square), sort far → near
-export function updateClouds(C, wind, eye, night, camera) {
+// density: the preset's cloud fullness (presets.js)
+export function updateClouds(C, wind, eye, night, camera, density = 1) {
   const buf = C.buf, wx = wind[0], wz = wind[1];
   const list = C.puffs.map(p => {
     const x = p.fixed ? p.x : ((p.x + wx + 7500) % 15000 + 15000) % 15000 - 7500, z = p.fixed ? p.z : ((p.z + wz + 7500) % 15000 + 15000) % 15000 - 7500;
     return [x, p.y, z, p.s, p.lit, p.a, (x - eye[0]) ** 2 + (p.y - eye[1]) ** 2 + (z - eye[2]) ** 2];
   }).sort((a, b) => b[6] - a[6]);
-  list.forEach((q, i) => { const o = i * 6; buf[o] = q[0]; buf[o + 1] = q[1]; buf[o + 2] = q[2]; buf[o + 3] = q[3]; buf[o + 4] = q[4]; buf[o + 5] = q[5] * (1 - night * 0.35); });
+  list.forEach((q, i) => { const o = i * 6; buf[o] = q[0]; buf[o + 1] = q[1]; buf[o + 2] = q[2]; buf[o + 3] = q[3]; buf[o + 4] = q[4]; buf[o + 5] = Math.min(1, q[5] * (1 - night * 0.35) * density); });
   C.ib.needsUpdate = true;
   const e = camera.matrixWorld.elements, u = C.mesh.material.uniforms;
   u.uCamR.value.set(e[0], e[1], e[2]); u.uCamU.value.set(e[4], e[5], e[6]);
