@@ -1,6 +1,6 @@
 # 深圳湾 · 空中之岛
 
-A floating-island 3D city of Shenzhen Bay (Houhai, Nanshan) rendered in the browser. The current version is a hand-written WebGL2 engine in one self-contained HTML page with the data embedded. **We are migrating to three.js r160 as a multi-file project — read `docs/handoff.md` first; it has the direction, the roadmap, acceptance criteria and the old-code → new-module map.**
+A floating-island 3D city of Shenzhen Bay (Houhai, Nanshan) rendered in the browser. The page is `web/`: three.js r160, ES modules, no build step (serve the project root, open `/web/`). The earlier hand-written WebGL2 single-file page (`src/city.src.html` → `index.html`) is kept as a reference. Read `docs/handoff.md` for the direction, the roadmap and what each phase delivered (§8).
 
 ## Files
 
@@ -30,14 +30,14 @@ A floating-island 3D city of Shenzhen Bay (Houhai, Nanshan) rendered in the brow
 
 China Resources HQ 392.5 m (22.51694, 113.94167) · One Shenzhen Bay T7 341.4 m · Zhongzhou Holdings Financial Center 300.8 m · Tencent Binhai Mansion 248 m / 194 m · Shenzhen Bay ITC T1 311.1 m / T2 247.2 m · Hanking Center 358.9 m · Huiyun Center 359.2 m · Shenzhen Bay Sports Center (cocoon) · Shenzhen Bay Cultural Plaza. See `LANDMARKS` in `tools/build_data.py`.
 
-## Next step
+## Status
 
-Phase 1 of `docs/handoff.md`: migrate to three.js r160 in `web/` on a branch, with visual parity to the current page. Then phase 2 (art style + real OSM buildings via `tools/osm/fetch_osm.py`), phase 3 (Blender landmarks / island as glb, node names `LM_<k>` / `ISLAND_body`), phase 4 (flight mode, time presets, audio, in-page recording).
+Phases 1–4 of `docs/handoff.md` are done (see its §8): the page in `web/` is the deliverable — real OSM buildings, modelled island rock and two landmarks, style A, four time presets, flight mode, synthesized sound, in-page recording, deployable as is (`tools/build_web.sh`, `.github/workflows/pages.yml`). The old single-file page stays as a reference. Open follow-ups are listed at the end of `docs/handoff.md` §8.
 
-Keep the test hooks listed in `docs/handoff.md` §4.4 (window.S, setTod, flyTo, VIEWS, startTour, …; time only from performance.now(), loop only via requestAnimationFrame) — `tools/record.py` and `tools/webgl_check.py` depend on them.
+Keep the test hooks listed in `docs/handoff.md` §4.4 (window.S, setTod, flyTo, VIEWS, startTour, …; plus choosePreset, startFlight / stopFlight, FLY on the new page; time only from performance.now(), loop only via requestAnimationFrame) — `tools/record.py`, `tools/webgl_check.py`, `tools/shoot_views.py` depend on them. Tools set `window.SZ_TEST`, which skips the start screen and starts on the day preset.
 
 ## Notes
 
-- Data honesty: roads and 11 landmarks are real; coastline and green areas are inferred from the road network; other buildings, sports fields, car parks, people and parked cars are generated. The page says so in its credits.
-- Keep the OSM attribution ("道路 © OpenStreetMap 贡献者").
+- Data honesty: roads, 2,778 OSM building footprints and 11 landmarks are real (8 landmark towers moved onto their OSM footprints); coastline and green areas are inferred from the road network; the remaining 672 buildings, sports fields, car parks, people and parked cars are generated. The page says so in its credits and the info card gives each building's source.
+- Keep the OSM attribution ("道路 © OpenStreetMap 贡献者", building footprints ODbL).
 - Reference project: github.com/Zenojz/shibuya-rain-walk (code MIT). Borrow approaches, not assets: its VRM characters are non-commercial-only and Mixamo animations may not be redistributed.

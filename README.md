@@ -1,43 +1,82 @@
 # 深圳湾 · 空中之岛
 
-把深圳湾后海一带做成一座漂在云海上的 3D 城市岛屿。纯浏览器运行，渲染引擎是手写的 WebGL2，不依赖任何库；数据全部内置在一个 HTML 文件里，可离线打开。
+把深圳湾后海一带做成一座漂在云海上的桌面沙盘：真实的道路、2,778 栋 OpenStreetMap 建筑和 11 座地标，岛底是层层叠叠的砂岩，海水从岛缘泻成瀑布。全部在浏览器里实时绘制（three.js r160），可以切换四个时段，也可以驾驶一架水上飞机穿过楼群和瀑布。
 
-直接用浏览器打开 `index.html` 即可（开启 GitHub Pages 后也可在线访问）。
+![白昼总览](docs/images/overview-day.jpg)
 
-## 场景里有什么
+| 晨雾 | 黄昏 |
+| - | - |
+| ![晨雾](docs/images/overview-mist.jpg) | ![黄昏](docs/images/city-dusk.jpg) |
+| **夜** | **后海 CBD** |
+| ![夜](docs/images/city-night.jpg) | ![后海 CBD](docs/images/cbd-day.jpg) |
+| **春茧（深圳湾体育中心）** | **岛底岩层** |
+| ![春茧](docs/images/cocoon.jpg) | ![岛底岩层](docs/images/island-rock.jpg) |
 
-- **城市**：真实 OSM 路网（4,799 条道路）、11 座真实地标（坐标与高度来自维基百科）、按真实街区生成的约 2,000 栋楼（写字楼、住宅、城中村、在建楼）
-- **浮空岛**：不规则岛体、岩层与垂岩、深圳湾海水从岛缘泻成的瀑布、云海、10 座小浮岛
-- **街道**：车道线、斑马线、转向箭头、红绿灯、公交站、路灯、立体车流、路边与停车场停车、行人和骑行者
-- **建筑细节**：裙楼、退台空中花园、避难层、大堂雨棚、空调外机、防盗网、窗后房间（interior mapping）
-- **空中**：航班、直升机、飞艇、热气球、白鹭、配送无人机、塔吊；夜里有 900 架无人机灯光秀、孔明灯、探照灯
-- **时间**：可拖动时间滑块，日照、阴影、灯光随时间变化
+## 运行
 
-## 操作
+页面在 `web/`，是一个不需要构建的多文件工程（ES 模块，three.js 放在 `web/vendor/`，运行时不依赖网络，字体除外）。在项目根目录起一个静态服务即可：
 
-拖动平移 · 右键 / Shift 拖动旋转 · 滚轮缩放 · 点击楼体查看信息。快捷键：`F` 空中漫游、`N` 日夜、`R` 环绕、`H` 总览、`C` 云层、`G` 显示/隐藏生成楼体。
+```bash
+python3 -m http.server 8765 --bind 127.0.0.1
+```
+
+然后打开 <http://127.0.0.1:8765/web/>。直接双击 HTML 不行（浏览器不允许本地文件加载模块和数据）。
+
+发布：`web/` 可以原样放到任何静态主机。仓库带了 GitHub Pages 工作流（`.github/workflows/pages.yml`），在仓库设置里把 Pages 的来源设为 “GitHub Actions” 后，每次推送到 `main` 就会发布 `web/`。
+
+链接参数：`?go=view` 跳过开始界面直接进入沙盘，`?go=fly` 直接起飞。
+
+## 玩法
+
+- **沙盘**：拖动平移 · 右键或 Shift 拖动旋转 · 滚轮缩放 · 点击楼体查看名称、高度和数据来源。
+- **时段**：晨雾（云海最厚，岛半隐半现）、白昼、黄昏（金色侧光，华灯初上）、夜（灯光秀与孔明灯）。快捷键 `1`–`4`，`N` 在白昼和夜之间切换。
+- **飞行**：`P` 或开始界面的“驾驶飞行器”。拖动或方向键操纵，`W` / `S` 油门，空格加速，`Esc` 返回沙盘。撞上楼会告诉你撞的是哪一栋；试试从瀑布中间穿过去。
+- **其他**：`F` 空中漫游 · `R` 环绕 · `H` 总览 · `T` 飞往最高楼 · `C` 云层 · `G` 显示/隐藏补位生成的楼体 · `M` 声音 · `V` 录屏（停止后自动保存为 MP4 或 WebM）。“飞往…”菜单里还有地标、视角和跟随航班、飞艇、热气球、渡轮、白鹭等。
+- **声音**全部由 WebAudio 实时合成：风、城市的低频底噪、瀑布、发动机、白天的鸟和夜里的虫。
+
+## 画面里有什么
+
+- **城市**：真实路网（岛上 3,064 条道路）；2,778 栋 OpenStreetMap 建筑按真实轮廓拉伸，按类型和高度着色；没有建筑数据的街区用 672 栋按街道生成的楼补位；11 座地标，其中 8 座塔楼已对齐到 OSM 的真实位置，春笋（华润大厦）和春茧（深圳湾体育中心）是 Blender 精模。
+- **浮空岛**：Blender 建的岩体（厚砂岩与板岩互层、外凸的岩檐、冲沟、91 根垂岩，颜色和遮蔽烘进顶点色），5 道瀑布、云海、10 座小浮岛。
+- **街道**：车道线、斑马线、转向箭头、红绿灯、公交站、路灯、车流、路边停车、行人和骑行者、近 2 万棵树。
+- **空中**：航班、直升机、飞艇、热气球、白鹭、配送无人机、塔吊、渡轮；夜里 900 架无人机灯光秀、孔明灯、探照灯。
+- **画风**：微缩沙盘（方向 A）——移轴景深、暖色调色、楼体边缘高光、青瓷绿与奶油色的楼、青绿色海湾、开花的树。
+
+## 数据和署名
+
+- 道路、建筑轮廓 © [OpenStreetMap 贡献者](https://www.openstreetmap.org/copyright)，ODbL。道路来自 [ni1o1/pygeo-tutorial](https://github.com/ni1o1/pygeo-tutorial) 的深圳路网 shapefile；建筑于 2026-10-22 经 Overpass 下载。
+- 地标的高度和名称来自维基百科；塔楼位置按 OSM 轮廓校正。
+- 楼高的来源在信息卡里写明：OSM 实测高度标签（299 栋）、按层数推算（1,477 栋）或按类型估算（1,002 栋）。补位生成的楼、球场、停车场、行人、停放车辆不对应真实对象。
+- 海岸线和绿地由路网推算；浮空岛、岩层、瀑布是虚构的。
+- 纹理（岩层、幕墙、云朵）和画风样张由 GPT Image 生成。three.js 与 meshoptimizer 解码器为 MIT 许可（见 `web/vendor/`）。
 
 ## 目录
 
 | 路径 | 说明 |
 | - | - |
-| `index.html` | 组装好的页面（数据已内置） |
-| `src/city.src.html` | 页面源码，`/*__SZDATA__*/` 处注入数据 |
-| `data/szbay.json` | 数据集：道路、海陆掩膜、用地掩膜、楼体、地标、树木、球场等 |
-| `tools/build_data.py` | 数据管线（OSM 路网 shapefile → `data/szbay.json`） |
-| `tools/assemble3.py` | 把源码和数据组装成 `index.html` |
-| `tools/build.sh` | 一键重建 |
-| `tools/record.py` | 逐帧录制演示视频（Playwright + 无头 Chromium） |
-| `tools/patches/` | 开发过程中各轮修改的脚本（仅供参考） |
-| `assets/textures/` | 内置 GPT Image 生成的岩层、幕墙、云朵纹理（提示词见 `assets/image-prompts.json`） |
-| `assets/web/` | 网页用的 512 px 版本（`tools/make_web_textures.py` 生成，组装时嵌入 `index.html`） |
-| `blender/shenzhen-bay.blend` | Blender 4.5 场景（几何取自页面实际生成结果，纹理已打包） |
-| `tools/blender/` | 几何导出、场景构建、渲染脚本 |
-| `tools/webgl_check.py` | WebGL 冒烟测试与 A/B 帧时间基准 |
-| `renders/` | Blender 渲染成品 |
-| `CLAUDE.md` | 给 Claude Code 的项目说明、坐标系和下一步计划 |
+| `web/` | **页面**：`index.html`、`src/*.js`（各模块说明见文件头注释）、`data/`、`assets/`（glb 模型、纹理）、`vendor/three/` |
+| `data/szbay.json` | 数据集：道路、海陆与用地掩膜、生成楼体、地标、树木、球场等 |
+| `data/osm/` | 烘焙后的 OSM 建筑与面状要素（`tools/osm/fetch_osm.py`） |
+| `tools/build_web.sh` | 准备 `web/`：同步数据、合并 OSM 建筑；`--models` 时重建 glb |
+| `tools/osm/` | OSM 下载与烘焙（`fetch_osm.py`），合并进页面（`merge_osm.py`） |
+| `tools/blender/` | 岛体与地标建模（`model_island.py`、`model_landmarks.py` 及 `build_*.sh`）；旧版场景的导出、构建、渲染脚本 |
+| `tools/webgl_check.py` | 冒烟测试与 A/B 帧时间 |
+| `tools/compare_views.py`、`tools/shoot_views.py` | 新旧页面对比截图；无界面的各视角截图 |
+| `tools/record.py` | 逐帧录制演示视频 |
+| `docs/handoff.md` | 交接文档：方向、路线图、各阶段进展 |
+| `docs/research/` | 调研：shibuya-rain-walk 的做法、性能测量、codex + Blender 管线 |
+| `src/city.src.html`、`index.html` | 旧版：手写 WebGL2 的单文件页面（数据内置，可离线双击打开），保留作对照 |
+| `blender/`、`renders/` | 旧版的 Blender 场景与离线渲染（见 `docs/render-notes.md`） |
 
 ## 重建
+
+```bash
+bash tools/build_web.sh                 # 同步 data/szbay.json，重新合并 OSM 建筑
+bash tools/build_web.sh --models        # 另外重建岛体和地标的 glb（需要 Blender 4.5 与 Node / npx）
+python3 tools/osm/fetch_osm.py fetch    # 重新下载 OSM（需要网络），然后 bake，再 build_web.sh
+```
+
+重建道路和生成楼体的数据集（`data/szbay.json`）需要 OSM 路网 shapefile：
 
 ```bash
 git clone --depth 1 --filter=blob:none --sparse https://github.com/ni1o1/pygeo-tutorial /tmp/pygeo
@@ -46,32 +85,13 @@ pip install numpy opencv-python pillow
 bash tools/build.sh /tmp/pygeo/shapefile
 ```
 
-只改了页面源码时，直接 `bash tools/build.sh` 即可。替换了 `assets/textures/` 里的纹理后，先运行 `python tools/make_web_textures.py`（需要 Pillow），再执行 `bash tools/build.sh`。
-
-## Blender 场景与渲染
+## 测试与录制
 
 ```bash
-python3 -m http.server 8765 --bind 127.0.0.1                         # 在项目根目录启动
-python tools/blender/export_scene.py                                  # 从页面读回实际几何 → build/blender_export/
-blender -b --factory-startup --python tools/blender/build_scene.py    # → blender/shenzhen-bay.blend
-blender -b blender/shenzhen-bay.blend --python tools/blender/render.py -- overview city --res 1600x900 --samples 128
+python tools/webgl_check.py http://127.0.0.1:8765/web/index.html                                  # 启动、日夜、拾取、窗口尺寸
+python tools/webgl_check.py http://127.0.0.1:8765/index.html http://127.0.0.1:8765/web/index.html   # 新旧 A/B 帧时间
+GPU=1 python tools/record.py build/frames --page http://127.0.0.1:8765/web/index.html                # 演示视频逐帧录制
+ffmpeg -framerate 30 -i build/frames/f_%05d.jpg -c:v libx264 -pix_fmt yuv420p -crf 20 build/demo.mp4
 ```
 
-导出脚本需要 Playwright 和本机 Chrome。场景按“城市 / 岛屿 / 地面与海湾 / 实例 / 云与天空”分集合组织，树、车、路灯、云朵都用几何节点实例化。版本、采样设置、素材用途和测试结果见 `docs/render-notes.md`。
-
-## 测试
-
-```bash
-python tools/webgl_check.py http://127.0.0.1:8765/index.html --fallbacks   # 启动、日夜、拾取、窗口尺寸、回退路径
-python tools/webgl_check.py <基线URL> <新版URL> --frames 60 --dynres       # A/B 帧时间与动态分辨率重分配
-```
-
-## 数据说明
-
-- 道路 © OpenStreetMap 贡献者（ODbL），来自 [ni1o1/pygeo-tutorial](https://github.com/ni1o1/pygeo-tutorial) 中的深圳路网 shapefile。
-- 地标坐标与高度来自维基百科。
-- 海岸线、绿地由路网推算；其余楼体、球场、停车场、行人、停放车辆为程序生成，不对应真实位置。
-
-## 下一步
-
-Blender 场景已经建好（见上文）。后续可以在其中精细化地标与岛体、烘焙光照后导出 glb，再在页面中加载替换程序生成的版本，详见 `CLAUDE.md`。
+这些脚本需要 Playwright 和本机 Chrome（环境变量 `CHROME` 指定路径）。在 AMD Radeon Pro 5300M、1280×720 下，新版每帧 15–20 ms，旧版 22–25 ms。
