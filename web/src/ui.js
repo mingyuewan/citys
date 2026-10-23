@@ -5,6 +5,8 @@ import { ZONE_ZH } from "./data.js";
 import { S, reduceMotion } from "./state.js";
 import { sky, fmtTod } from "./sky.js";
 import { HOME, VIEWS, flyTo, startTour, stopTour, stopUserMotion } from "./camera.js";
+import { AIR } from "./air.js";
+import { FALLS } from "./island.js";
 
 export const $ = s => document.querySelector(s);
 export const fmt = n => n.toLocaleString("zh-CN");
@@ -81,6 +83,10 @@ export function initUI() {
     if (!v) return;
     if (v[0] === "b") { flyToBuilding(+v.slice(1)); return; }
     if (v.startsWith("v-")) { flyTo(VIEWS[v](), reduceMotion ? 0 : 3000); return; }
+    stopTour(); S.fly = null;
+    if (v === "show") { if (sky(S.todTarget).night < 0.6) setTod(20.6, true); const A = AIR.show.anchor; flyTo({ tx: A[0] - AIR.show.f[0] * 300, tz: A[2] - AIR.show.f[2] * 300, ty: 200, yaw: Math.atan2(-AIR.show.f[0], -AIR.show.f[2]), pitch: 0.12, dist: 900 }, reduceMotion ? 0 : 2600); return; }
+    S.follow = { kind: v, k: 0, sm: null };
+    closeCard();
   };
   // Shenzhen local time
   const szHour = (new Date().getUTCHours() + 8 + new Date().getUTCMinutes() / 60) % 24;
@@ -90,7 +96,8 @@ export function initUI() {
 
 // once the scene is built: stats line, coordinates, the fly-to menu
 export function fillUI(osm, D, counts) {
-  $("#stats").innerHTML = `<b>${fmt(osm.roads.length)}</b> 条 OSM 道路 · <b>${fmt(osm.landmarkCount)}</b> 座真实地标 · <b>${fmt(osm.buildings.length - osm.landmarkCount)}</b> 栋生成楼体（${counts.construct} 处在建） · <b>${counts.falls}</b> 道瀑布 · <b>${counts.islets}</b> 座小浮岛`;
+  const c = counts;
+  $("#stats").innerHTML = `<b>${fmt(osm.roads.length)}</b> 条 OSM 道路 · <b>${fmt(osm.landmarkCount)}</b> 座真实地标 · <b>${fmt(osm.buildings.length - osm.landmarkCount)}</b> 栋生成楼体（${c.construct} 处在建） · <b>${fmt(c.trees)}</b> 棵树 · <b>${fmt(c.shrubs)}</b> 丛绿化带灌木 · <b>${c.falls}</b> 道瀑布 · <b>${c.islets}</b> 座小浮岛 · <b>${fmt(c.lamps)}</b> 盏路灯 · <b>${fmt(c.signals)}</b> 组红绿灯 · <b>${c.bus}</b> 个公交站 · <b>${c.features}</b> 处球场、泳池和停车场`;
   $("#coords").textContent = `${D.center[0].toFixed(4)}°N ${D.center[1].toFixed(4)}°E · 范围 ${(S.R * 2 / 1000).toFixed(1)}×${(S.R * 2 / 1000).toFixed(1)} km`;
   const sel = $("#selLm");
   const og1 = document.createElement("optgroup"); og1.label = "地标"; sel.appendChild(og1);
@@ -99,4 +106,60 @@ export function fillUI(osm, D, counts) {
   });
   const og0 = document.createElement("optgroup"); og0.label = "视角"; sel.insertBefore(og0, og1);
   for (const [v, t] of [["v-isle", "岛屿全景"], ["v-city", "城市俯瞰"], ["v-falls", "深圳湾瀑布"], ["v-under", "岛底仰望"]]) { const o = document.createElement("option"); o.value = v; o.textContent = t; og0.appendChild(o); }
+  const og2 = document.createElement("optgroup"); og2.label = "空中"; sel.appendChild(og2);
+  for (const [v, t] of [["plane", "跟随航班"], ["blimp", "跟随飞艇"], ["balloon", "跟随热气球"], ["heli", "跟随直升机"], ["quad", "跟随配送无人机"], ["boat", "跟随渡轮"], ["birds", "跟随白鹭群"], ["show", "无人机灯光秀（夜间）"]]) { const o = document.createElement("option"); o.value = v; o.textContent = t; og2.appendChild(o); }
+}
+
+/* ---------------- labels: landmarks, districts, the bay, flights ---------------- */
+export function buildLabels(osm, D) {
+  const box = $("#labels"); box.textContent = ""; S.labels = [];
+  const add = (cls, html, x, y, z, prio, dyn) => {
+    const el = document.createElement("div"); el.className = "lbl " + cls; el.innerHTML = html; el.style.opacity = "0"; box.appendChild(el);
+    const l = { el, x, y, z, prio, w: 0, h: 0, dyn, isB: cls === "bld" }; S.labels.push(l); return l;
+  };
+  const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const lms = osm.buildings.slice(0, osm.landmarkCount).filter(b => b.h >= 200 || b.L.k === "cocoon").sort((a, b) => b.h - a.h);
+  const seen = new Set();
+  for (const b of lms) {
+    const short = b.name.replace(/[（(].*?[)）]/g, "").replace(/ (南塔|北塔)$/, "");
+    if (seen.has(short)) continue; seen.add(short);
+    const c = b.L.c;
+    add("bld", `${esc(short)}<small>${Math.round(b.h)} m</small>`, c[0], b.h + 8, c[1], b.L.k === "cocoon" ? 2 : 3);
+  }
+  for (const l of D.labels) add(l.k === "sea" ? "sea" : "area", esc(l.n), l.x, l.k === "sea" ? 5 : 25, l.z, l.k === "sea" ? 5 : 1);
+  S.airLabels = AIR.planes.map(p => add("air", `✈ ${p.name}`, 0, 0, 0, 4, true));
+  S.labelOrder = S.labels.slice().sort((a, b) => b.prio - a.prio);
+  requestAnimationFrame(() => S.labels.forEach(l => { l.w = l.el.offsetWidth; l.h = l.el.offsetHeight; }));
+}
+// vp: view-projection (column-major elements), cw/ch: canvas CSS size
+export function placeLabels(vp, eye, cw, ch) {
+  AIR.planes.forEach((p, i) => { const l = S.airLabels[i]; if (p.pos && l) { l.x = p.pos[0]; l.y = p.pos[1] + 6; l.z = p.pos[2]; } });
+  const m = vp, placed = [];
+  for (const l of S.labelOrder) {
+    const y = l.dyn ? l.y : l.y * S.rise;
+    const w = m[3] * l.x + m[7] * y + m[11] * l.z + m[15];
+    const px = (m[0] * l.x + m[4] * y + m[8] * l.z + m[12]) / w, py = (m[1] * l.x + m[5] * y + m[9] * l.z + m[13]) / w, pz = (m[2] * l.x + m[6] * y + m[10] * l.z + m[14]) / w;
+    let vis = w > 0 && px > -1.05 && px < 1.05 && py > -1.05 && py < 1.05 && pz < 1 && S.rise > 0.9;
+    const sx = (px * 0.5 + 0.5) * cw, sy = (1 - (py * 0.5 + 0.5)) * ch;
+    const d = Math.hypot(eye[0] - l.x, eye[1] - y, eye[2] - l.z);
+    const isB = l.isB, isAir = l.dyn;
+    if (vis && isB && d > S.R * 4.2) vis = false;
+    if (vis && !isAir && eye[1] < -20) vis = false;
+    if (vis && isAir && d > 5200) vis = false;
+    if (vis) {
+      const isC = !isB && !isAir;
+      const bx = { x0: sx - l.w / 2, x1: sx + l.w / 2, y0: isC ? sy - l.h / 2 : sy - l.h, y1: isC ? sy + l.h / 2 : sy };
+      if (placed.some(q => bx.x0 < q.x1 && bx.x1 > q.x0 && bx.y0 < q.y1 && bx.y1 > q.y0)) vis = false; else placed.push(bx);
+    }
+    l.el.style.opacity = vis ? "" : "0";
+    if (vis) l.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, ${isB ? "-100%" : isAir ? "-150%" : "-50%"})`;
+  }
+}
+// the "空中" status line, twice a second
+export function skyStatus(now) {
+  if (S._skyT && now - S._skyT <= 500) return;
+  S._skyT = now;
+  const items = [`热气球 ${(AIR.balloons || []).length}`, `飞艇 1`, `瀑布 ${FALLS.groups.length} 道`, `船 ${(AIR.boats || []).length} 艘`, `塔吊 ${(AIR.cranes || []).length} 台`, `✈ 航班 ${AIR.planes.length}`, `🚁 直升机 ${AIR.helis.length}`, `白鹭 ${AIR.flocks.reduce((a, f) => a + f.n, 0)} 只`, `配送无人机 ${AIR.quads.length}`];
+  if (AIR.show.active) items.push(`<b>灯光秀进行中 · ${AIR.show.N} 架 · 孔明灯升空</b>`); else items.push("灯光秀与孔明灯 19:00 后开始");
+  $("#sky").innerHTML = "空中：" + items.join(" · ");
 }

@@ -3,17 +3,23 @@
    requestAnimationFrame: tools/record.py and tools/webgl_check.py replace both to step frames. */
 import * as THREE from "three";
 import { S, reduceMotion } from "./state.js";
-import { ISLE, inIsle, clamp, meshGeometry } from "./world.js";
+import { ISLE, inIsle, clamp, meshGeometry, orient } from "./world.js";
 import { loadData, loadImg, decodeData } from "./data.js";
 import { buildCity, CONSTRUCT } from "./buildings.js";
-import { buildIsland, FALLS, ISLETS } from "./island.js";
+import { buildIsland, makeFalls, FALLS, ISLETS } from "./island.js";
+import { buildBridges, makeRoads, updateRoads, LAMPS, SIGLIGHTS, BUSLIGHTS } from "./roads.js";
+import { makeProps, updateProps } from "./props.js";
+import { makeTraffic, updateTraffic, TRAFFIC } from "./traffic.js";
+import { makeAir, updateAir, finishAir, AIR } from "./air.js";
+import { ROOFTREES, ROOFTREE_Y } from "./buildings.js";
+import { LATE_SHADOW } from "./instancing.js";
 import { makeGround } from "./ground.js";
-import { sky, makeSky, makeSea } from "./sky.js";
+import { sky, skyAmbient, makeSky, makeSea, makeClouds, updateClouds } from "./sky.js";
 import { U } from "./materials/common.js";
 import { makeMeshMaterial, makeShadowMaterial } from "./materials/building.js";
 import { Post } from "./post.js";
 import { HOME, VIEWS, flyTo, initCamera, stepCamera, bindInput, startTour, stopTour } from "./camera.js";
-import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey } from "./ui.js";
+import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus } from "./ui.js";
 
 const canvas = $("#gl");
 let renderer;
@@ -40,7 +46,7 @@ const M = { city: null, island: null, sky: makeSky(), sea: makeSea(), ground: nu
 scene.add(M.sky, M.sea);
 
 /* ---------------- textures (GPT Image, downscaled by tools/make_web_textures.py) ---------------- */
-const TEX = { rock: null, facade: null };
+const TEX = { rock: null, facade: null, cloud: null };
 function loadTex(url, repeat) {
   return new Promise(res => new THREE.TextureLoader().load(url, t => {
     // v = up, like the facade UVs (flipY on, the three.js default); sampled raw, no sRGB decode
@@ -49,8 +55,8 @@ function loadTex(url, repeat) {
     res(t);
   }, undefined, () => res(null)));
 }
-const texReady = Promise.all([loadTex("assets/island-rock.webp", true), loadTex("assets/tower-facade.webp", true)])
-  .then(([rock, facade]) => { TEX.rock = rock; TEX.facade = facade; });
+const texReady = Promise.all([loadTex("assets/island-rock.webp", true), loadTex("assets/tower-facade.webp", true), loadTex("assets/cloud-puff.webp", false)])
+  .then(([rock, facade, cloud]) => { TEX.rock = rock; TEX.facade = facade; TEX.cloud = cloud; });
 
 /* ---------------- shadow map ----------------
    Depth texture with hardware compare (sampler2DShadow in the shaders), sized to the device, refit around the focus each frame. */
@@ -62,6 +68,7 @@ const SM = { size: Math.min(LOW_END ? 2048 : 3072, renderer.capabilities.maxText
   SM.rt = new THREE.WebGLRenderTarget(SM.size, SM.size, { depthTexture: dt, format: THREE.RedFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
 }
 const shadowMat = makeShadowMaterial();
+shadowScene.userData.shadowMat = shadowMat;
 
 /* ---------------- resolution ---------------- */
 const PERF = { scale: (window.SZ_TEST && window.SZ_TEST.scale) || 1 };
@@ -83,16 +90,28 @@ async function buildScene() {
   await sleep(30);
   const [maskImg, luImg] = await Promise.all([loadImg(D.mask), loadImg(D.lu)]);
   const osm = decodeData(D); S.osm = osm;
-  const city = buildCity(osm, D);
+  const bridges = buildBridges(osm);   // marks bridge roads as ribbons: the ground and road mesh skip them
+  const city = buildCity(osm, D); orient(city.V, city.I);
   S.lmIdx = city.lmEnd; S.tris = city.I.length / 3;
   M.city = new THREE.Mesh(meshGeometry(city.V, city.I), meshMat);
   loader.show("正在绘制地面", "海岸、绿地与道路"); await sleep(30);
   M.ground = makeGround(osm, D, maskImg, luImg, renderer);
   loader.show("正在升起岛屿", "岩层、垂岩、瀑布与小浮岛"); await sleep(30);
-  const isle = buildIsland(maskImg, D); S.waterAt = isle.waterAt;
+  const isle = buildIsland(maskImg, D); S.waterAt = isle.waterAt; orient(isle.V, isle.I);
   M.island = new THREE.Mesh(meshGeometry(isle.V, isle.I), meshMat);
   M.city.frustumCulled = M.island.frustumCulled = false;   // vertices are lifted in the shader during the rise
   M.island.renderOrder = 1;
+  loader.show("正在铺路", "车道线、斑马线、人行道、路灯与球场"); await sleep(30);
+  makeRoads(osm, bridges, meshMat, scene, shadowScene);
+  loader.show("正在种树", "行道树、车流、行人、瀑布与云层"); await sleep(30);
+  const itx = [], ity = [];
+  for (const I of ISLETS) { itx.push(...I.tx); ity.push(...I.ty); }
+  itx.push(...ROOFTREES); ity.push(...ROOFTREE_Y);
+  M.props = makeProps(D, { x: itx, y: ity }, meshMat, scene, shadowScene);
+  makeTraffic(osm, bridges, isle.waterAt, scene, shadowScene);
+  scene.add(makeFalls());
+  M.clouds = makeClouds(TEX.cloud); scene.add(M.clouds.mesh);
+  makeAir(osm, D, isle.waterAt, scene, shadowScene);
   M.city.geometry.computeBoundingSphere();
   scene.add(M.ground, M.city, M.island);
   for (const m of [M.city, M.island]) { const s = new THREE.Mesh(m.geometry, shadowMat); s.frustumCulled = false; shadowScene.add(s); }
@@ -100,7 +119,10 @@ async function buildScene() {
   let tallest = -1, th = 0;
   osm.buildings.forEach((b, i) => { if (b.h > th) { th = b.h; tallest = i; } });
   S.tallest = tallest;
-  fillUI(osm, D, { construct: CONSTRUCT.length, falls: FALLS.groups.length, islets: ISLETS.length });
+  const P = M.props, nTrees = P.trees[1].count + P.trees[2].count + P.trees[3].count;
+  fillUI(osm, D, { construct: CONSTRUCT.length, falls: FALLS.groups.length, islets: ISLETS.length, trees: nTrees, shrubs: P.trees[0].count,
+    lamps: LAMPS.length, signals: SIGLIGHTS.length, bus: BUSLIGHTS.length, features: P.features.n });
+  buildLabels(osm, D);
   S.sel = -1; $("#card").hidden = true;
   S.rise = reduceMotion ? 1 : 0; S.riseStart = performance.now(); S.ready = true;
   S.cam = { tx: 0, tz: 0, ty: -400, yaw: -0.3, pitch: 0.75, dist: 21000 };
@@ -165,7 +187,7 @@ function tick(now) {
   v3(U.uSunDir, L.sun); v3(U.uLightDir, L.lightDir); v3(U.uLightCol, L.lightCol);
   U.uNight.value = L.night; U.uGold.value = L.gold; v3(U.uCam, eye);
   U.uFogDen.value = 1 / (S.R * (6.5 + 3.5 * (1 - L.night)));
-  U.uIsle.value.set(ISLE.R0, ISLE.thH, ISLE.lobe);
+  U.uIsle.value.set(ISLE.R0, ISLE.thH, ISLE.lobe); v3(U.uSkyAmb, skyAmbient(L));
   U.uTime.value = now / 1000; U.uWind.value.set(S.wind[0], S.wind[1]);
   U.uShadow.value = SM.rt.depthTexture; U.uShadowOn.value = L.dayF > 0.15 && SM.on ? 1 : 0;
   U.uShadowTexel.value.set(1 / SM.size, 1 / SM.size); U.uNOff.value = SM.texel * 1.5;
@@ -176,12 +198,21 @@ function tick(now) {
   const mu = meshMat.uniforms;
   mu.uSel.value = S.sel; mu.uLit.value = L.lit; mu.uAccent.value = L.night > 0.5 ? [1.6, 1.0, 0.35] : [0.85, 0.45, 0.12];
   M.city.geometry.setDrawRange(0, S.showGen ? Infinity : S.lmIdx);
+  // streets: cells by distance, moving things stepped and packed, clouds drifted and sorted
+  updateRoads(eye); updateProps(eye);
+  updateTraffic(reduceMotion ? 0 : dt, now / 1000, L.night > 0.5, eye);
+  const pm = TRAFFIC.lights.material.uniforms; pm.uPx.value = H / (2 * Math.tan(0.39)); pm.uAdd.value = 1;
+  updateAir(now / 1000, reduceMotion ? 0 : dt, L, eye); finishAir(H / (2 * Math.tan(0.39)));
+  M.clouds.mesh.visible = S.showClouds; if (S.showClouds) updateClouds(M.clouds, S.wind, eye, L.night, camera);
 
   if (L.dayF > 0.15 && SM.on) {
+    if (S.rise > 0.9) lc.layers.enable(LATE_SHADOW); else lc.layers.disable(LATE_SHADOW);
     renderer.setRenderTarget(SM.rt); renderer.clear(false, true, false);
     renderer.render(shadowScene, lc);
   }
   post.render(scene, camera, L);
+  placeLabels(U.uVP.value.elements, eye, VIEW.cw, VIEW.ch);
+  skyStatus(now);
 }
 requestAnimationFrame(tick);
 
@@ -189,7 +220,7 @@ requestAnimationFrame(tick);
 initUI();
 bindInput(canvas, { onClick: pick, onKey });
 // test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
-Object.assign(window, { S, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, inIsle, pick,
+Object.assign(window, { S, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
   canvas, gl, renderer, camera, post, SM, CTX });
 window.__dbg = { scene, shadowScene, M, meshMat, post, SM, U, THREE };   // debugging / profiling only
 buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });

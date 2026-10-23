@@ -53,6 +53,20 @@ export class Geo {
   tri(a, b, c) { this.i.push(a, b, c); }
   quad(a, b, c, d) { this.i.push(a, b, c, a, c, d); }
 }
+// The old engine drew with culling off and flipped back-facing normals in the shader, so the generators' winding is
+// mixed (walls and caps come out clockwise). Turn every triangle to face the way its vertex normals point, so the
+// meshes can be drawn with back-face culling.
+export function orient(V, I) {
+  let flipped = 0;
+  for (let k = 0; k < I.length; k += 3) {
+    const a = I[k] * VS, b = I[k + 1] * VS, c = I[k + 2] * VS;
+    const ux = V[b] - V[a], uy = V[b + 1] - V[a + 1], uz = V[b + 2] - V[a + 2], wx = V[c] - V[a], wy = V[c + 1] - V[a + 1], wz = V[c + 2] - V[a + 2];
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    const d = nx * (V[a + 3] + V[b + 3] + V[c + 3]) + ny * (V[a + 4] + V[b + 4] + V[c + 4]) + nz * (V[a + 5] + V[b + 5] + V[c + 5]);
+    if (d < 0) { const t = I[k + 1]; I[k + 1] = I[k + 2]; I[k + 2] = t; flipped++; }
+  }
+  return flipped;
+}
 // interleaved Float32 vertices → BufferGeometry with attributes position, normal, color, uv, bid, mat
 export function meshGeometry(V, I) {
   const g = new THREE.BufferGeometry();
@@ -91,6 +105,7 @@ export function frustum(g, A, B, y0, y1, col, mat, bid, o = {}) {
   const n = A.length;
   let per = o.u0 || 0;
   const smoothN = o.smooth;
+  const i0 = g.i.length, vA = g.n;
   const en = [];
   for (let i = 0; i < n; i++) {
     const a = A[i], b = A[(i + 1) % n], ta = B[i];
@@ -112,6 +127,11 @@ export function frustum(g, A, B, y0, y1, col, mat, bid, o = {}) {
     const v3 = g.vert(ta[0], y1, ta[1], na[0], na[1], na[2], col, u0, y1, bid, mat);
     g.quad(v0, v1, v2, v3);
     per += len;
+  }
+  if (o.both) {   // inner faces: the same walls, normals reversed (culling is on, see orient())
+    const vB = g.n, iB = g.i.length, off = vB - vA, v = g.v;
+    for (let k = vA; k < vB; k++) { const b = k * VS; v.push(v[b], v[b + 1], v[b + 2], -v[b + 3], -v[b + 4], -v[b + 5], v[b + 6], v[b + 7], v[b + 8], v[b + 9], v[b + 10], v[b + 11], v[b + 12]); g.n++; }
+    for (let k = i0; k < iB; k += 3) g.i.push(g.i[k] + off, g.i[k + 2] + off, g.i[k + 1] + off);
   }
   if (o.cap !== false && Math.abs(ringArea(B)) > 0.5) {
     const rc = o.capCol || col.map(x => x * 0.8);

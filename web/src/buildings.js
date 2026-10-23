@@ -36,7 +36,7 @@ export function genBuilding(g, b, bid) {
       if (rnd() < 0.35) { const tc = [0.30, 0.40, 0.60]; prism(g, circleRing(x + (rnd() - 0.5) * w * 0.5, z + (rnd() - 0.5) * d * 0.5, 1.2, 8), h, h + 2.2, tc, 5, bid); }
       if (rnd() < 0.4) { const c = Math.cos(ang), s2 = Math.sin(ang), n = 2 + (rnd() * 3 | 0); for (let k = 0; k < n; k++) { const v = (k - (n - 1) / 2) * 2.4; boxAt(g, x - s2 * v + c * w * 0.15, z + c * v + s2 * w * 0.15, w * 0.45, 1.8, ang, h + 0.4, h + 0.9, [0.10, 0.14, 0.26], 5, bid); } }
       if (rnd() < 0.2) prism(g, rectRing(x, z, w * 0.8, d * 0.8, ang), h, h + 0.4, [0.30, 0.45, 0.22], 11, bid);
-      prism(g, scaleRing(rectRing(x, z, w, d, ang), 1.0, x, z), h, h + 1.1, col.map(v => v * 0.9), 3, bid, { cap: false });
+      prism(g, scaleRing(rectRing(x, z, w, d, ang), 1.0, x, z), h, h + 1.1, col.map(v => v * 0.9), 3, bid, { cap: false, both: true });
       const nc = rnd() * 4 | 0;
       for (let k = 0; k < nc; k++) {
         const u = (rnd() - 0.5) * w * 0.7, v = (rnd() - 0.5) * d * 0.7, c = Math.cos(ang), s2 = Math.sin(ang);
@@ -60,9 +60,9 @@ export function genBuilding(g, b, bid) {
     boxAt(g, x, z, Math.min(w, d) * 0.35, Math.min(w, d) * 0.28, ang, h, h + 4.5, col, 1, bid);
     if (rnd() < 0.35) { const ax = x + Math.cos(ang) * w * 0.2, az = z + Math.sin(ang) * w * 0.2; frustum(g, circleRing(ax, az, 0.35, 6), circleRing(ax, az, 0.08, 6), h + 4.5, h + 12 + rnd() * 12, METAL, 5, bid, { cap: false }); }
     if (rnd() < 0.25) { const tx2 = x - Math.cos(ang) * w * 0.25, tz2 = z - Math.sin(ang) * w * 0.25; prism(g, circleRing(tx2, tz2, 2.2, 10), h, h + 3.2, [0.72, 0.72, 0.70], 3, bid, { smooth: true }); }
-    if (rnd() < 0.5) prism(g, scaleRing(R, 1.02, x, z), h, h + 1.2, col.map(v => v * 0.9), 3, bid, { cap: false });
+    if (rnd() < 0.5) prism(g, scaleRing(R, 1.02, x, z), h, h + 1.2, col.map(v => v * 0.9), 3, bid, { cap: false, both: true });
     else if (h > 60 && rnd() < 0.6) {      // decorative crown frame (common on Shenzhen residential towers)
-      prism(g, scaleRing(R, 1.01, x, z), h, h + 6.5, col.map(v => v * 0.95), 3, bid, { cap: false });
+      prism(g, scaleRing(R, 1.01, x, z), h, h + 6.5, col.map(v => v * 0.95), 3, bid, { cap: false, both: true });
       prism(g, scaleRing(R, 1.04, x, z), h + 6.5, h + 7.4, col.map(v => v * 0.85), 3, bid, { capCol: col.map(v => v * 0.8) });
     }
     if (h > 90 && rnd() < 0.4) beacons.push([x, h + 5, z, rnd() * 6]);

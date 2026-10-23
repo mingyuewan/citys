@@ -2,6 +2,8 @@
    Ported verbatim from the "floating island body" section of src/city.src.html. */
 import { Geo, rng, lerp, clamp, vn1, vn2, wrapA, isleR, norm3, cross3, frustum, prism, boxAt, rectRing, circleRing, triangulate } from "./world.js";
 import { beacons } from "./buildings.js";
+import * as THREE from "three";
+import { makeFallMaterial } from "./materials/fx.js";
 
 // profile rows: [y, radial scale, kind]  kind: 0 grass lip · 1 soil · 2 rock
 export const ISLE_PROF = [[0.6, 1.0, 0], [-6, 1.014, 0], [-24, 1.004, 1], [-62, 0.99, 1], [-140, 0.955, 2], [-290, 0.905, 2], [-500, 0.83, 2], [-760, 0.73, 2],
@@ -155,4 +157,13 @@ export function buildIsland(maskImg, D) {
     ISLETS.push({ cx, cy: y, cz, r, tx, ty, hasFall });
   }
   return { V: new Float32Array(g.v), I: new Uint32Array(g.i), waterAt };
+}
+
+// ---- waterfall sheets (pos3 uv2 edge1 per vertex, non-indexed)
+export function makeFalls() {
+  const g = new THREE.BufferGeometry(), ib = new THREE.InterleavedBuffer(new Float32Array(FALLS.v), 6);
+  g.setAttribute("position", new THREE.InterleavedBufferAttribute(ib, 3, 0)); g.setAttribute("uv", new THREE.InterleavedBufferAttribute(ib, 2, 3)); g.setAttribute("edge", new THREE.InterleavedBufferAttribute(ib, 1, 5));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
+  const m = new THREE.Mesh(g, makeFallMaterial()); m.frustumCulled = false; m.renderOrder = 10;
+  return m;
 }

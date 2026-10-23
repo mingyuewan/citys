@@ -1,18 +1,26 @@
 /* Building / island / bridge mesh shader (material ids 0–20) and its shadow-depth variant.
    Verbatim from src/city.src.html (meshVS, meshFS, shadowVS, emptyFS). */
+import * as THREE from "three";
 import { HEAD, COMMON, rawMat } from "./common.js";
 
 export const meshVS = HEAD + `
 layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec3 aCol; layout(location=3) in vec2 aUv; layout(location=4) in float aBid; layout(location=5) in float aMat;
 uniform mat4 uVP; uniform mat4 uLightVP; uniform float uRise; uniform float uMaxR; uniform float uNOff;
 out vec3 vPos; out vec3 vNrm; out vec3 vCol; out vec2 vUv; out vec4 vLight; flat out float vBid; flat out float vMat;
+#ifdef MODEL
+uniform mat4 modelMatrix;
+#endif
 void main(){
-  vec3 p = aPos;
+  vec3 p = aPos; vec3 nrm = aNrm;
+#ifdef MODEL
+  p = (modelMatrix * vec4(aPos, 1.0)).xyz; nrm = normalize(mat3(modelMatrix) * aNrm);
+#else
   float d = length(p.xz) / uMaxR;
   float g = clamp(uRise * 1.6 - d * 0.6, 0.0, 1.0); g = g*g*(3.0-2.0*g);
   if (aMat < 9.5) p.y *= max(g, 0.002);
-  vPos = p; vNrm = aNrm; vCol = aCol; vUv = aUv; vBid = aBid; vMat = aMat;
-  vLight = uLightVP * vec4(p + aNrm * uNOff, 1.0);
+#endif
+  vPos = p; vNrm = nrm; vCol = aCol; vUv = aUv; vBid = aBid; vMat = aMat;
+  vLight = uLightVP * vec4(p + nrm * uNOff, 1.0);
   gl_Position = uVP * vec4(p, 1.0);
 }`;
 export const meshFS = HEAD + COMMON + `
@@ -312,8 +320,21 @@ void main(){
 export const shadowVS = HEAD + `
 layout(location=0) in vec3 aPos; layout(location=5) in float aMat;
 uniform mat4 uLightVP; uniform float uRise; uniform float uMaxR;
-void main(){ vec3 p = aPos; float d = length(p.xz) / uMaxR; float g = clamp(uRise * 1.6 - d * 0.6, 0.0, 1.0); g = g*g*(3.0-2.0*g); if (aMat < 9.5) p.y *= max(g, 0.002); gl_Position = uLightVP * vec4(p, 1.0); }`;
+#ifdef MODEL
+uniform mat4 modelMatrix;
+#endif
+void main(){ vec3 p = aPos;
+#ifdef MODEL
+  p = (modelMatrix * vec4(aPos, 1.0)).xyz;
+#else
+  float d = length(p.xz) / uMaxR; float g = clamp(uRise * 1.6 - d * 0.6, 0.0, 1.0); g = g*g*(3.0-2.0*g); if (aMat < 9.5) p.y *= max(g, 0.002);
+#endif
+  gl_Position = uLightVP * vec4(p, 1.0); }`;
 export const emptyFS = HEAD + `out vec4 o; void main(){ o = vec4(1.0); }`;
 
-export const makeMeshMaterial = () => rawMat(meshVS, meshFS, { uSel: { value: -1 }, uAccent: { value: [0.85, 0.45, 0.12] }, uLit: { value: 0.35 } });
+// front faces only: the meshes are oriented by world.js orient()
+export const makeMeshMaterial = () => rawMat(meshVS, meshFS, { uSel: { value: -1 }, uAccent: { value: [0.85, 0.45, 0.12] }, uLit: { value: 0.35 } }, { side: THREE.FrontSide });
 export const makeShadowMaterial = () => rawMat(shadowVS, emptyFS, {}, { polygonOffset: true, polygonOffsetFactor: 1.5, polygonOffsetUnits: 2.0, colorWrite: false });
+// aerial models (air.js): placed by their object transform, not lifted by the rise, both sides drawn
+export const makeModelMaterial = () => rawMat(meshVS, meshFS, { uSel: { value: -1 }, uAccent: { value: [0.85, 0.45, 0.12] }, uLit: { value: 0.35 } }, { defines: { MODEL: "" } });
+export const makeModelShadowMaterial = () => rawMat(shadowVS, emptyFS, {}, { defines: { MODEL: "" }, polygonOffset: true, polygonOffsetFactor: 1.5, polygonOffsetUnits: 2.0, colorWrite: false });

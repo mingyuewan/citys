@@ -28,7 +28,8 @@ vec3 skyColor(vec3 d){
   if (h < 0.0) night = mix(nh + vec3(0.06, 0.03, 0.01), vec3(0.03, 0.03, 0.04), clamp(-h * 4.0, 0.0, 1.0));
   return mix(day, night, uNight);
 }
-vec3 skyAmb(){ vec3 s = skyColor(vec3(0.0, 1.0, 0.0)); float l = dot(s, vec3(0.3, 0.5, 0.2)); return mix(vec3(l), s, 0.45) * 1.05; }
+uniform vec3 uSkyAmb;   // skyColor(up) desaturated: constant per frame, computed by sky.js skyAmbient()
+vec3 skyAmb(){ return uSkyAmb; }
 vec3 fogIt(vec3 c, vec3 p){
   vec3 v = p - uCam; float d = length(v);
   float f = 1.0 - exp(-pow(d * uFogDen, 1.5));
@@ -60,7 +61,7 @@ export const U = {
   uVP: { value: new THREE.Matrix4() }, uLightVP: { value: new THREE.Matrix4() },
   uSunDir: { value: new THREE.Vector3() }, uLightDir: { value: new THREE.Vector3() }, uLightCol: { value: new THREE.Vector3() },
   uNight: { value: 0 }, uGold: { value: 0 }, uCam: { value: new THREE.Vector3() }, uFogDen: { value: 1e-4 }, uTime: { value: 0 },
-  uWind: { value: new THREE.Vector2() }, uIsle: { value: new THREE.Vector3() },
+  uWind: { value: new THREE.Vector2() }, uIsle: { value: new THREE.Vector3() }, uSkyAmb: { value: new THREE.Vector3() },
   uShadow: { value: null }, uShadowOn: { value: 0 }, uShadowTexel: { value: new THREE.Vector2(1, 1) }, uNOff: { value: 0 },
   uRise: { value: 0 }, uMaxR: { value: 1 },
   uRock: { value: white }, uFacade: { value: white }, uTexOn: { value: new THREE.Vector2() },
@@ -69,7 +70,8 @@ export const WHITE_TEX = white;
 
 // The old engine bound attributes by location; three.js binds by name. Rename the declarations and keep the
 // shader bodies untouched with a #define per attribute.
-const ATTR = { aPos: "position", aNrm: "normal", aCol: "color", aUv: "uv", aBid: "bid", aMat: "mat", aXZ: "position" };
+const ATTR = { aPos: "position", aNrm: "normal", aCol: "color", aUv: "uv", aBid: "bid", aMat: "mat", aXZ: "position",
+  aA: "ra", aB: "rb", aPart: "part", aInst: "inst", aY: "iy", aI0: "i0", aI1: "i1", aSize: "size", aCorner: "position", aC: "puff", aL: "plit", aEdge: "edge", aT: "bt" };
 function glsl3(src) {
   return src.replace(/layout\(location=\d+\) in (\w+) (\w+);\s*/g, (m, type, name) => {
     const to = ATTR[name]; if (!to) throw new Error("unmapped attribute " + name);

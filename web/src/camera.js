@@ -3,6 +3,7 @@
 import { clamp, lerp, norm3, isleR } from "./world.js";
 import { FALLS, isleScaleAt } from "./island.js";
 import { S, reduceMotion } from "./state.js";
+import { AIR, quadPos } from "./air.js";
 
 const $ = s => document.querySelector(s);
 let D = null;
@@ -88,6 +89,22 @@ export function stepCamera(now, dt) {
     const ahead = tourAt(S.tour.P, S.tour.u + 0.9);
     const hd = Math.hypot(ahead[0] - eye[0], ahead[2] - eye[2]) || 1;
     tgt = [ahead[0], Math.min(ahead[1], eye[1]) - hd * (0.12 + Math.min(0.35, eye[1] / 4000)), ahead[2]];
+  } else if (S.follow) {
+    const t = now / 1000, f = S.follow; let obj, back = 120, up = 30;
+    if (f.kind === "plane") { obj = AIR.planes[0]; back = 160; up = 35; }
+    else if (f.kind === "heli") { obj = AIR.helis[0]; obj.dir = [Math.cos(obj.yaw), 0, Math.sin(obj.yaw)]; back = 60; up = 18; }
+    else if (f.kind === "quad") { const q = AIR.quads[0]; obj = q; const a = quadPos(q, q.t + 0.5); q.dir = norm3([a[0] - q.pos[0], 0.0001, a[2] - q.pos[2]]); back = 28; up = 9; }
+    else if (f.kind === "blimp") { obj = AIR.blimp; back = 160; up = 30; }
+    else if (f.kind === "balloon") { const B = AIR.balloons[0]; obj = B; const a = t * B.w + B.ph; B.dir = norm3([-Math.sin(a) * Math.sign(B.w), 0, Math.cos(a) * Math.sign(B.w)]); back = 70; up = 8; }
+    else if (f.kind === "boat") { obj = (AIR.boats || []).find(b => b.type === "ferry") || (AIR.boats || [])[0]; back = 110; up = 30; }
+    else if (f.kind === "birds") { const F = AIR.flocks[0]; obj = F; const a = t * F.w + F.ph; F.dir = norm3([Math.cos(a) * F.A[0] * F.w, 0, Math.cos(a * 2 + 1) * 2 * F.A[1] * F.w]); back = 70; up = 22; }
+    if (obj && obj.pos) {
+      const d = obj.dir || [1, 0, 0];
+      const want = [obj.pos[0] - d[0] * back, obj.pos[1] + up, obj.pos[2] - d[2] * back];
+      f.sm = f.sm ? f.sm.map((v, i) => lerp(v, want[i], Math.min(1, dt * 2.5))) : (S.eyeNow ? S.eyeNow.slice() : want);
+      f.k = Math.min(1, f.k + dt * 0.6);
+      eye = f.sm; tgt = [obj.pos[0] + d[0] * 60, obj.pos[1] - 6, obj.pos[2] + d[2] * 60];
+    } else { eye = orbitEye(); tgt = [S.cam.tx, S.cam.ty || 0, S.cam.tz]; }
   } else {
     if (S.fly) {
       const f = S.fly, k = Math.min(1, (now - f.t0) / f.ms), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
