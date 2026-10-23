@@ -1,6 +1,6 @@
 /* Generated buildings and landmarks → one merged city mesh (landmarks first, so the first lmEnd indices are landmarks).
    Ported verbatim from the "palettes / generated buildings / landmarks" sections of src/city.src.html. */
-import { Geo, hash1, rng, lerp, centroid, prism, frustum, boxAt, scaleRing, rectRing, chamferRing, superRing, circleRing, crossRing, lRing, gableRoof, shell } from "./world.js";
+import { Geo, VS, hash1, rng, lerp, centroid, prism, frustum, boxAt, scaleRing, rectRing, chamferRing, superRing, circleRing, crossRing, lRing, gableRoof, shell } from "./world.js";
 
 // ---- palettes
 export const GLASS = [[0.60, 0.74, 0.74], [0.54, 0.70, 0.66], [0.82, 0.80, 0.74], [0.56, 0.66, 0.74], [0.78, 0.66, 0.52], [0.66, 0.76, 0.70]];   // style A: celadon, cream, a terracotta
@@ -290,13 +290,28 @@ export function genOsmBuilding(g, b, bid) {
   if (h > 50) roofSpots.push([cx, h + 3, cz]);
 }
 
+// modelled landmarks (models.js, tools/blender/model_landmarks.py): k → { V, I } in local coordinates, placed on the
+// landmark's centre and rotation; the procedural version is still generated into a throwaway Geo for its side effects
+// (searchlight tops, aircraft beacons)
+export const LANDMARK_MODELS = {};
+function appendModel(g, M, cx, cz, ang, bid) {
+  const c = Math.cos(ang), s = Math.sin(ang), V = M.V, base = g.n;
+  for (let o = 0; o < V.length; o += VS) {
+    const x = V[o], z = V[o + 2], nx = V[o + 3], nz = V[o + 5];
+    g.v.push(cx + c * x - s * z, V[o + 1], cz + s * x + c * z, c * nx - s * nz, V[o + 4], s * nx + c * nz, V[o + 6], V[o + 7], V[o + 8], V[o + 9], V[o + 10], bid, V[o + 12]);
+    g.n++;
+  }
+  for (let k = 0; k < M.I.length; k++) g.i.push(base + M.I[k]);
+}
+
 // landmarks, real buildings, generated buildings — in that order, so a draw range can leave the generated ones out
 export function buildCity(osm, D) {
   const g = new Geo();
   let realEnd = 0;
   const nReal = osm.landmarkCount + (osm.osmCount || 0);
   osm.buildings.forEach((b, bid) => {
-    if (b.landmark) genLandmark(g, b.L, bid, D.landmarks); else if (b.osm) genOsmBuilding(g, b, bid); else genBuilding(g, b, bid);
+    if (b.landmark && LANDMARK_MODELS[b.L.k]) { genLandmark(new Geo(), b.L, bid, D.landmarks); appendModel(g, LANDMARK_MODELS[b.L.k], b.L.c[0], b.L.c[1], b.L.rot * Math.PI / 180, bid); }
+    else if (b.landmark) genLandmark(g, b.L, bid, D.landmarks); else if (b.osm) genOsmBuilding(g, b, bid); else genBuilding(g, b, bid);
     if (bid === nReal - 1) realEnd = g.i.length;
   });
   return { V: new Float32Array(g.v), I: new Uint32Array(g.i), lmEnd: realEnd };

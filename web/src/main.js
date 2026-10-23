@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { S, reduceMotion } from "./state.js";
 import { ISLE, inIsle, clamp, meshGeometry, orient } from "./world.js";
 import { loadData, loadImg, decodeData, loadOsmBuildings } from "./data.js";
-import { buildCity, CONSTRUCT } from "./buildings.js";
+import { buildCity, CONSTRUCT, LANDMARK_MODELS } from "./buildings.js";
 import { buildIsland, makeFalls, FALLS, ISLETS } from "./island.js";
 import { buildBridges, makeRoads, updateRoads, LAMPS, SIGLIGHTS, BUSLIGHTS } from "./roads.js";
 import { makeProps, updateProps } from "./props.js";
@@ -107,6 +107,7 @@ function resize() {
 /* ---------------- build scene ---------------- */
 async function buildScene() {
   const models = loadModel("assets/island.glb");   // modelled rock body (tools/blender/model_island.py); fetched while the data loads
+  const lmModels = loadModel("assets/landmarks.glb");   // Spring Bamboo, Spring Cocoon (tools/blender/model_landmarks.py)
   const realBuildings = loadOsmBuildings();   // real footprints (tools/osm/merge_osm.py), fetched alongside
   const D = await loadData();
   window.D = D; S.R = D.R; initCamera(D);
@@ -116,6 +117,9 @@ async function buildScene() {
   const [maskImg, luImg] = await Promise.all([loadImg(D.mask), loadImg(D.lu)]);
   const osm = decodeData(D, await realBuildings); S.osm = osm;
   const bridges = buildBridges(osm);   // marks bridge roads as ribbons: the ground and road mesh skip them
+  const lmRoot = await lmModels;
+  for (const k of ["bamboo", "cocoon"]) { const m = toPageGeometry(lmRoot, "LM_" + k); if (m) LANDMARK_MODELS[k] = m; }
+  S.landmarkModels = Object.keys(LANDMARK_MODELS);
   const city = buildCity(osm, D); orient(city.V, city.I);
   S.lmIdx = city.lmEnd; S.tris = city.I.length / 3;
   M.city = new THREE.Mesh(meshGeometry(city.V, city.I), meshMat);

@@ -39,6 +39,8 @@ VIEWS = {
     "dusk": ("VIEWS['v-city']()", 17.3),
     "night": ("VIEWS['v-city']()", 21.0),
     "under": ("VIEWS['v-under']()", 15.5),
+    "bamboo": ("(() => { const l = D.landmarks.find(l => l.k === 'bamboo'); return { tx: l.c[0], tz: l.c[1], ty: 170, yaw: 0.9, pitch: 0.16, dist: 620 }; })()", 15.5),
+    "cocoon": ("(() => { const l = D.landmarks.find(l => l.k === 'cocoon'); return { tx: l.c[0], tz: l.c[1], ty: 0, yaw: 0.5, pitch: 0.42, dist: 560 }; })()", 15.5),
     "rock": ("({ tx: -1700, tz: 1700, ty: -650, yaw: -0.785, pitch: 0.05, dist: 2300 })", 15.5),
 }
 SET = """([v, tod]) => { S.fly = null; S.follow = null; S.tour = null; S.orbit = false; S.rise = 1;
