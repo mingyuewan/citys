@@ -86,19 +86,21 @@ function makeWater(maskImg, D) {
   const md = c2.getImageData(0, 0, 1024, 1024).data;
   return (x, z) => { const i = clamp(Math.floor((x + D.R) / (2 * D.R) * 1024), 0, 1023), j = clamp(Math.floor((z + D.R) / (2 * D.R) * 1024), 0, 1023); return md[(j * 1024 + i) * 4] > 127; };
 }
-export function buildIsland(maskImg, D) {
-  const g = new Geo();
+// body: false when a modelled rock body replaces the procedural one (models.js, ISLAND_body): it is still built — into a
+// throwaway Geo — so the rim rows (waterfalls, vines) and every random sequence stay exactly as they were
+export function buildIsland(maskImg, D, { body = true } = {}) {
+  const g = new Geo(), gb = body ? g : new Geo();
   // water lookup from the mask
   const waterAt = makeWater(maskImg, D);
   const N = 320;
   const wet = th => { const r = isleR(th) * 0.982; return waterAt(Math.cos(th) * r, Math.sin(th) * r); };
-  const rows = rockBody(g, 0, 0, 0, isleR, ISLE_PROF, N, 1.3, wet);
+  const rows = rockBody(gb, 0, 0, 0, isleR, ISLE_PROF, N, 1.3, wet);
   // hanging rock spires under the island
   const R = rng(4242);
   for (let s = 0; s < 70; s++) {
     const k = 4 + Math.floor(R() * 8), i = Math.floor(R() * N), P = rows[k][i];
     const sc = 0.93, x = P[0] * sc, z = P[2] * sc, y = P[1] + 25, rad = 25 + R() * 90, len = 120 + R() * 480;
-    frustum(g, circleRing(x, z, rad, 9), circleRing(x + (R() - 0.5) * 30, z + (R() - 0.5) * 30, rad * 0.06, 9), y, y - len, [0.58, 0.44, 0.34], 10, -1, { cap: false, smooth: true });
+    frustum(gb, circleRing(x, z, rad, 9), circleRing(x + (R() - 0.5) * 30, z + (R() - 0.5) * 30, rad * 0.06, 9), y, y - len, [0.58, 0.44, 0.34], 10, -1, { cap: false, smooth: true });
   }
   // vines over the lip
   for (let i = 0; i < N; i++) {

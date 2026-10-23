@@ -59,6 +59,7 @@ void main(){
   float shade = mix(1.0, 0.5 + 0.55 * dot(tx.rgb, vec3(0.3, 0.5, 0.2)), uPuffA);     // and its own self-shading
   float d = distance(vPos, uCam);
   float a = t * vA * smoothstep(120.0, 750.0, d) * mix(1.0, 1.0 - 0.55 * uNight, uPuffA);   // textured puffs are denser: thin them at night so city light shows through
+  a *= smoothstep(-1900.0, -1760.0, vPos.y);   // style A: low puffs fade into the cloud sea instead of being cut by its plane
   vec3 sunC = mix(vec3(1.0, 0.99, 0.97), vec3(1.0, 0.72, 0.50), uGold);
   vec3 dayC = mix(vec3(0.74, 0.72, 0.84), sunC * vec3(1.0, 0.97, 0.90), vLit) * (0.88 + 0.22 * vUv.y);   // style A: lavender shade, cream light
   vec3 nightC = mix(vec3(0.16, 0.10, 0.07), vec3(0.06, 0.07, 0.10), vLit);
@@ -68,7 +69,9 @@ void main(){
 }`;
 
 const blend = (src, dst) => ({ transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: src, blendDst: dst });
-const PREMUL = blend(THREE.OneFactor, THREE.OneMinusSrcAlphaFactor), ADD = blend(THREE.OneFactor, THREE.OneFactor);
+// premultiplied over; the alpha channel keeps what still shows through (transmittance) for the composite's cavity pass
+const PREMUL = { ...blend(THREE.OneFactor, THREE.OneMinusSrcAlphaFactor), blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor, blendEquationAlpha: THREE.AddEquation },
+  ADD = blend(THREE.OneFactor, THREE.OneFactor);
 export const makeFallMaterial = () => rawMat(fallVS, fallFS, {}, PREMUL);
 // uAdd 1: additive glow (night lights); uPx: pixels per metre at distance 1 (set per frame)
 export const makePointMaterial = () => rawMat(pointVS, pointFS, { uPx: { value: 1 }, uAdd: { value: 1 } }, ADD);

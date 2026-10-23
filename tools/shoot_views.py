@@ -35,6 +35,8 @@ VIEWS = {
     "falls": ("VIEWS['v-falls']()", 15.5),
     "dusk": ("VIEWS['v-city']()", 17.3),
     "night": ("VIEWS['v-city']()", 21.0),
+    "under": ("VIEWS['v-under']()", 15.5),
+    "rock": ("({ tx: -1700, tz: 1700, ty: -650, yaw: -0.785, pitch: 0.05, dist: 2300 })", 15.5),
 }
 SET = """([v, tod]) => { S.fly = null; S.follow = null; S.tour = null; S.orbit = false; S.rise = 1;
   Object.assign(S.cam, eval(v)); S.tod = S.todTarget = tod; for (let i = 0; i < 6; i++) window.__step(16.7); }"""

@@ -18,6 +18,7 @@ import { sky, skyAmbient, makeSky, makeSea, makeClouds, updateClouds } from "./s
 import { U } from "./materials/common.js";
 import { makeMeshMaterial, makeShadowMaterial } from "./materials/building.js";
 import { Post, LOOK } from "./post.js";
+import { loadModel, toPageGeometry, concatGeometry } from "./models.js";
 import { HOME, VIEWS, flyTo, initCamera, stepCamera, bindInput, startTour, stopTour } from "./camera.js";
 import { $, fmt, sleep, loader, initUI, fillUI, applyModeUI, setTod, setPlate, showCard, closeCard, flyToBuilding, onKey, buildLabels, placeLabels, skyStatus } from "./ui.js";
 
@@ -105,6 +106,7 @@ function resize() {
 
 /* ---------------- build scene ---------------- */
 async function buildScene() {
+  const models = loadModel("assets/island.glb");   // modelled rock body (tools/blender/model_island.py); fetched while the data loads
   const D = await loadData();
   window.D = D; S.R = D.R; initCamera(D);
   await texReady;
@@ -119,7 +121,10 @@ async function buildScene() {
   loader.show("正在绘制地面", "海岸、绿地与道路"); await sleep(30);
   M.ground = makeGround(osm, D, maskImg, luImg, renderer);
   loader.show("正在升起岛屿", "岩层、垂岩、瀑布与小浮岛"); await sleep(30);
-  const isle = buildIsland(maskImg, D); S.waterAt = isle.waterAt; orient(isle.V, isle.I);
+  const rock = toPageGeometry(await models, "ISLAND_body");
+  let isle = buildIsland(maskImg, D, { body: !rock }); S.waterAt = isle.waterAt; S.islandModel = !!rock;
+  if (rock) isle = { ...isle, ...concatGeometry(isle, rock) };
+  orient(isle.V, isle.I);
   M.island = new THREE.Mesh(meshGeometry(isle.V, isle.I), meshMat);
   M.city.frustumCulled = M.island.frustumCulled = false;   // vertices are lifted in the shader during the rise
   M.island.renderOrder = 1;
@@ -248,5 +253,5 @@ bindInput(canvas, { onClick: pick, onKey });
 // test hooks (tools/record.py, tools/webgl_check.py) — see docs/handoff.md §4.4
 Object.assign(window, { $, S, PERF, setTod, flyTo, VIEWS, HOME, startTour, stopTour, flyToBuilding, closeCard, setPlate, FALLS, AIR, inIsle, pick,
   canvas, gl, renderer, camera, post, SM, CTX });
-window.__dbg = { LOOK, scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
+window.__dbg = { toPageGeometry, LOOK, scene, shadowScene, dynShadowScene, M, meshMat, post, SM, U, THREE, PERF };   // debugging / profiling only
 buildScene().catch(e => { console.error(e); loader.show("加载失败", "场景构建出错，请刷新页面重试。", { err: e.message || String(e) }); });

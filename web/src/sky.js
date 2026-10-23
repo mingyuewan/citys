@@ -14,7 +14,8 @@ export function sky(tod) {
   const night = 1 - dayF;
   const gold = dayF * (1 - smooth(0.04, 0.42, sun[1]));
   const moon = norm3([-0.35, 0.62, -0.45]);
-  const sunCol = [1.0 * 1.15, (0.92 - 0.33 * gold) * 1.15, (0.80 - 0.5 * gold) * 1.15]   // style A: a warmer sun.map(v => v * clamp(sun[1] * 4 + 0.15, 0, 1));
+  // style A: a warmer sun
+  const sunCol = [1.0 * 1.15, (0.92 - 0.33 * gold) * 1.15, (0.80 - 0.5 * gold) * 1.15].map(v => v * clamp(sun[1] * 4 + 0.15, 0, 1));
   const moonCol = [0.030, 0.038, 0.060];
   const lightDir = dayF > 0.15 ? sun : moon;
   const lightCol = dayF > 0.15 ? sunCol : moonCol;
@@ -84,7 +85,7 @@ export function makeClouds(tex) {
   // style A: a carpet of big, low clouds round and under the island (the sea of clouds seen from above)
   const RC = rng(29);
   for (let c = 0; c < 34; c++) {
-    const a = RC() * Math.PI * 2, r = 2600 + RC() * 6500, cx = Math.cos(a) * r, cz = Math.sin(a) * r, cy = -1750 + RC() * 300;
+    const a = RC() * Math.PI * 2, r = 2600 + RC() * 6500, cx = Math.cos(a) * r, cz = Math.sin(a) * r, cy = -1880 + RC() * 140;   // just above the cloud sea: the views from below stay clear of it
     const n = 5 + (RC() * 5 | 0), size = 380 + RC() * 260;
     for (let k = 0; k < n; k++) {
       const dx = (RC() - 0.5) * size * 3.0, dz = (RC() - 0.5) * size * 2.4, dy = RC() * size * 0.45;

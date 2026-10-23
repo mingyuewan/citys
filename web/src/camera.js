@@ -17,7 +17,7 @@ export const VIEWS = {
     const G = FALLS.groups.slice().sort((a, b) => b.w - a.w)[0] || { x: 2000, z: 2000, ox: 0.7, oz: 0.7 };
     return { tx: G.x + G.ox * 200, tz: G.z + G.oz * 200, ty: -620, yaw: Math.atan2(G.ox, G.oz) + 0.35, pitch: 0.1, dist: 3400 };
   },
-  "v-under": () => ({ tx: 0, tz: 0, ty: -700, yaw: S.cam.yaw, pitch: -0.16, dist: 6200 })
+  "v-under": () => ({ tx: 0, tz: 0, ty: -700, yaw: S.cam.yaw, pitch: -0.1, dist: 6200 })
 };
 
 export function flyTo(to, ms) {

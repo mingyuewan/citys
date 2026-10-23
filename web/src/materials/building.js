@@ -74,7 +74,7 @@ void main(){
   vec3 skyUp = skyAmb();
   vec3 amb = mix(vec3(0.30, 0.29, 0.27) * (1.0 - uNight * 0.9), skyUp * 0.95, n.y * 0.5 + 0.5) * (1.0 - uNight * 0.55);
   amb += vec3(0.010, 0.012, 0.020) * uNight;
-  amb += max(-n.y, 0.0) * (vec3(0.55, 0.57, 0.62) * (1.0 - uNight) + vec3(0.07, 0.04, 0.02) * uNight);
+  amb += max(-n.y, 0.0) * (vec3(0.64, 0.60, 0.56) * (1.0 - uNight) + vec3(0.07, 0.04, 0.02) * uNight);   // style A: warm light bounced up from the clouds
   vec3 direct = uLightCol * ndl * sh;
   float ao = (roof || m >= 10) ? 1.0 : mix(0.55, 1.0, smoothstep(0.0, 14.0, vPos.y));
   vec3 alb = vCol, emis = vec3(0.0);
@@ -215,17 +215,18 @@ void main(){
   if (m == 10) {
     float nA = vnoise(vec2(vUv.x * 0.02, vPos.y * 0.02)), nB = vnoise(vec2(vUv.x * 0.11, vPos.y * 0.13));
     float band = 0.5 + 0.5 * sin(vPos.y * 0.09 + nA * 7.0);
-    alb = vCol * (0.78 + 0.22 * band) * (0.8 + 0.4 * nB);
+    alb = vCol * (0.92 + 0.08 * band) * (0.85 + 0.3 * nB);   // the strata are in the vertex colour (modelled body)
     if (uTexOn.x > 0.5) {   // rock strata texture at two scales, normalised by its mean so the page's tones are kept
       vec2 ru = vec2(vUv.x, vPos.y);
       vec3 rm = max(textureLod(uRock, vec2(0.5), 12.0).rgb, vec3(0.05));
       vec3 r1 = texture(uRock, ru / vec2(260.0, 180.0)).rgb / rm, r2 = texture(uRock, ru / vec2(41.0, 29.0)).rgb / rm;
-      alb = vCol * (0.86 + 0.14 * band) * r1 * mix(vec3(1.0), r2, 0.5 * (1.0 - smoothstep(600.0, 2600.0, camD)));
+      alb = vCol * (0.95 + 0.05 * band) * mix(vec3(1.0), r1, 0.5) * mix(vec3(1.0), r2, 0.3 * (1.0 - smoothstep(600.0, 2600.0, camD)));   // style A: the texture as grain, the beds from the model
     }
     alb = mix(alb, vec3(0.66, 0.46, 0.30), smoothstep(-90.0, -10.0, vPos.y) * 0.6);
     float moss = smoothstep(0.35, 0.8, n.y) * smoothstep(0.4, 0.7, nA);
     alb = mix(alb, vec3(0.40, 0.56, 0.24), moss);
     glassAmt = 0.0;
+    amb *= vec3(1.18, 1.06, 0.94);   // style A: rock in shade stays warm (sun bounced off the sandstone)
   } else if (m == 11) {
     alb = vCol * (0.8 + 0.4 * vnoise(vec2(vUv.x * 0.07, vPos.z * 0.07 + vPos.y * 0.2)));
     glassAmt = 0.0;

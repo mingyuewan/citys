@@ -48,7 +48,7 @@ void main(){
   if (uCav.x + uCav.y > 0.0 && vz < uFar * 0.5) {
     vec2 e = uTexel * uCav.z;
     float nb = (linZ(vUv + vec2(e.x, 0.0)) + linZ(vUv - vec2(e.x, 0.0)) + linZ(vUv + vec2(0.0, e.y)) + linZ(vUv - vec2(0.0, e.y))) * 0.25;
-    float rel = (nb - vz) / vz, sharp = 1.0 - coc;
+    float rel = (nb - vz) / vz, sharp = (1.0 - coc) * texture(uScene, vUv).a;   // a: how much clouds / falls let through
     float ridge = smoothstep(0.003, 0.04, rel) * (1.0 - smoothstep(0.5, 3.0, rel)), valley = smoothstep(0.0015, 0.02, -rel);
     c = c * (1.0 - uCav.y * valley * sharp) + vec3(1.0, 0.86, 0.66) * uCav.x * ridge * sharp * (1.0 - uNight * 0.8) * (0.4 + 0.6 * dot(c, vec3(0.33)));
   }
