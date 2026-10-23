@@ -1,6 +1,6 @@
 """Clean screenshots of the web/ page (no UI) for look development.
 
-usage: .venv/bin/python tools/shoot_views.py [--url URL] [--out build/style] [--tag name] [--size 1280x720] [--query "style=..."]
+usage: .venv/bin/python tools/shoot_views.py [--url URL] [--out build/style] [--tag name] [--size 1280x720] [--query "style=..."] [--no-models] [view ...]
 Writes <out>/<tag>-<view>.png for the views below. Serve the project root first. env CHROME = Chrome executable.
 """
 import os
@@ -25,6 +25,9 @@ QUERY = opt("--query", "")
 OUT = opt("--out", "build/style")
 TAG = opt("--tag", "now")
 W, H = (int(v) for v in opt("--size", "1280x720").split("x"))
+NO_MODELS = "--no-models" in args   # block web/assets/*.glb: the procedural fallbacks
+if NO_MODELS:
+    args.remove("--no-models")
 CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 FAKE = """window.SZ_TEST={scale:1};window.__T=1000;(()=>{const cbs=[];window.requestAnimationFrame=cb=>{cbs.push(cb);return cbs.length;};performance.now=()=>window.__T;window.__step=ms=>{window.__T+=ms;const c=cbs.splice(0);for(const f of c)f(window.__T);};})();"""
 VIEWS = {
@@ -48,6 +51,8 @@ with sync_playwright() as p:
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.on("console", lambda m: errs.append(m.text) if m.type == "error" and "favicon" not in m.text else None)
     pg.add_init_script(FAKE)
+    if NO_MODELS:
+        pg.route("**/*.glb", lambda r: r.abort())
     pg.goto(URL + ("?" + QUERY if QUERY else ""))
     pg.wait_for_function("() => typeof S !== 'undefined' && S.ready", timeout=240000, polling=500)
     pg.add_style_tag(content="#rail,#plate,#card,#loader,#labels{display:none!important}")
